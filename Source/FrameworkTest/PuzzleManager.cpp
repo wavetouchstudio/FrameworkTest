@@ -1,0 +1,45 @@
+#include "PuzzleManager.h"
+#include "PuzzleTrigger.h"
+#include "PlatformBase.h"
+
+#include "Components/SceneComponent.h"
+
+APuzzleManager::APuzzleManager()
+{
+    PrimaryActorTick.bCanEverTick = false;
+
+    USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+    RootComponent = Root;
+}
+
+void APuzzleManager::TriggerActivated(APuzzleTrigger* CallingTrigger)
+{
+    if (!RegisteredTriggers.Contains(CallingTrigger)) return;
+    if (ActiveTriggers.Contains(CallingTrigger)) return;
+
+    ActiveTriggers.Add(CallingTrigger);
+
+    if (ActiveTriggers.Num() >= RegisteredTriggers.Num())
+    {
+        bIsSolved = true;
+        for (APlatformBase* Platform : Platforms)
+            if (IsValid(Platform)) Platform->Activate();
+        OnPuzzleSolved();
+    }
+}
+
+void APuzzleManager::TriggerDeactivated(APuzzleTrigger* CallingTrigger)
+{
+    if (!RegisteredTriggers.Contains(CallingTrigger)) return;
+    if (!ActiveTriggers.Contains(CallingTrigger)) return;
+
+    ActiveTriggers.Remove(CallingTrigger);
+
+    if (ActiveTriggers.Num() < RegisteredTriggers.Num())
+    {
+        bIsSolved = false;
+        for (APlatformBase* Platform : Platforms)
+            if (IsValid(Platform)) Platform->Deactivate();
+        OnPuzzleReset();
+    }
+}

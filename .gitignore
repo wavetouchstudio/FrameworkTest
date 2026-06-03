@@ -1,0 +1,87 @@
+# ========================
+# Official Epic Games / UE5 .gitignore
+# ========================
+
+# Visual Studio files
+.vs/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Packages
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Unreal Engine generated directories
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Unreal Engine generated files
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Visual Studio Code
+.vscode/
+
+# Rider
+.idea/
+*.DotSettings.user
+
+# ========================
+# Project-specific exclusions
+# ========================
+
+# Game content (binary assets — tracked separately or manually)
+Content/
+
+# Local/dev folders
+Backup/
+FridayWorkspace/
+
+# Claude Code (private memory and MCP config)
+.claude/
+
+# Sync tool artifacts
+.stfolder/
+
+# IDE workspace files
+*.code-workspace
+.vsconfig

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "unreal-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "gamewave-unreal-mcp",
+        "unreal-mcp"
+      ]
+    }
+  }
+}

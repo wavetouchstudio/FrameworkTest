@@ -7,6 +7,7 @@
 class UStaticMeshComponent;
 class UCurveFloat;
 class UNiagaraComponent;
+class UNiagaraSystem;
 class USpringArmComponent;
 class USceneComponent;
 class USphereComponent;
@@ -210,6 +211,26 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Throw")
     float ThrowImpactRadius = 100.f;
 
+    // Seconds after the block hits something before it vanishes and respawns
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Throw")
+    float HitDespawnDelay = 2.f;
+
+    // Safety respawn if the block never hits anything (e.g. fell off the map)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Throw")
+    float SafetyDespawnDelay = 8.f;
+
+    // Height above the pickup location where the block reappears
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Throw")
+    float RespawnHeight = 300.f;
+
+    // One-shot Niagara system spawned at the respawn point. Assign in Blueprint.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Throw")
+    UNiagaraSystem* RespawnEffect = nullptr;
+
+    // Fires when the block respawns — use for sounds, additional VFX, etc.
+    UFUNCTION(BlueprintImplementableEvent, Category = "Carry|Throw")
+    void OnRespawn();
+
     // Feed -1 (Q held), 0 (neither), or 1 (E held) to rotate object in placement mode
     UFUNCTION(BlueprintCallable, Category = "Pickup|Placement")
     void SetPlacementRotationInput(float Input);
@@ -246,6 +267,7 @@ private:
     float CurrentCarryDistance = 0.f;
     FVector LerpStartPosition = FVector::ZeroVector;
     bool bThrowing = false;
+    bool bPlacementJustStarted = false;
 
     void PickUp(ACharacter* InCarrier);
     void BeginDrop();
@@ -255,6 +277,12 @@ private:
     FVector GetDropPosition() const;
 
     void InitiateStack(APickupObject* Block);
+
+    FVector PickupLocation = FVector::ZeroVector;
+    FTimerHandle HitDespawnTimer;
+    FTimerHandle SafetyDespawnTimer;
+
+    void DespawnAndRespawn();
 
     APickupObject* PendingStack = nullptr;
     bool bSnappingStack = false;

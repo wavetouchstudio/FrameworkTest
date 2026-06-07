@@ -8,6 +8,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "PuzzleTrigger.h"
 
@@ -78,6 +79,7 @@ void APickupObject::PickUp(ACharacter* InCarrier)
     LerpAlpha = 0.f;
     CurrentCarryDistance = CarryForwardDistance;
     LerpStartPosition = GetActorLocation();
+    PickupLocation = GetActorLocation();
     PickupState = EPickupState::LerpingToHold;
 
     Mesh->SetSimulatePhysics(false);
@@ -167,6 +169,7 @@ void APickupObject::StartPlacement()
     }
 
     PickupState = EPickupState::Placing;
+    bPlacementJustStarted = true;
     PlacementRotationInput = 0.f;
     PlacementVerticalInput = 0.f;
     PlacementHeightAdjust = 0.f;
@@ -202,6 +205,7 @@ void APickupObject::ConfirmPlacement()
 void APickupObject::CancelPlacement()
 {
     if (PickupState != EPickupState::Placing) return;
+    if (bPlacementJustStarted) return;
 
     if (bKeepBlockAtPlacementLocationOnCancel)
     {
@@ -253,6 +257,8 @@ void APickupObject::ThrowBlock()
 
     bThrowing = true;
     Mesh->SetPhysicsLinearVelocity(ThrowVelocity);
+
+    GetWorldTimerManager().SetTimer(SafetyDespawnTimer, this, &APickupObject::DespawnAndRespawn, SafetyDespawnDelay, false);
 }
 
 void APickupObject::SetPlacementRotationInput(float Input)
@@ -292,6 +298,8 @@ FVector APickupObject::GetDropPosition() const
 void APickupObject::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    bPlacementJustStarted = false;
 
     // Runs independently of carry state so the arm can lerp back after the block is dropped
     if (CachedSpringArm)
@@ -531,6 +539,9 @@ void APickupObject::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimi
     if (bThrowing)
     {
         bThrowing = false;
+        GetWorldTimerManager().ClearTimer(SafetyDespawnTimer);
+        GetWorldTimerManager().SetTimer(HitDespawnTimer, this, &APickupObject::DespawnAndRespawn, HitDespawnDelay, false);
+
         TArray<FOverlapResult> Overlaps;
         FCollisionShape Sphere = FCollisionShape::MakeSphere(ThrowImpactRadius);
         GetWorld()->OverlapMultiByObjectType(Overlaps, HitLocation, FQuat::Identity,
@@ -542,6 +553,29 @@ void APickupObject::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimi
                 Block->DislodgeStack();
         }
     }
+}
+
+void APickupObject::DespawnAndRespawn()
+{
+    GetWorldTimerManager().ClearTimer(HitDespawnTimer);
+    GetWorldTimerManager().ClearTimer(SafetyDespawnTimer);
+
+    // Block was re-picked up before the timer fired — leave it alone
+    if (bIsCarried || PickupState != EPickupState::Idle) return;
+
+    const FVector SpawnPos = PickupLocation + FVector(0.f, 0.f, RespawnHeight);
+    SetActorLocation(SpawnPos);
+    SetActorRotation(FRotator::ZeroRotator);
+
+    Mesh->SetSimulatePhysics(true);
+    Mesh->SetEnableGravity(true);
+    Mesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
+    Mesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+
+    if (RespawnEffect)
+        UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, RespawnEffect, SpawnPos);
+
+    OnRespawn();
 }
 
 void APickupObject::OnStackSphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,

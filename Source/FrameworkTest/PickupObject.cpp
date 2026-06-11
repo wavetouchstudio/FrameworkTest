@@ -11,6 +11,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "CollisionShape.h"
 #include "PuzzleTrigger.h"
 
 APickupObject::APickupObject()
@@ -49,6 +50,10 @@ void APickupObject::BeginPlay()
     Super::BeginPlay();
     StackDetection->OnComponentBeginOverlap.AddDynamic(this, &APickupObject::OnStackSphereBeginOverlap);
     StackDetection->OnComponentEndOverlap.AddDynamic(this, &APickupObject::OnStackSphereEndOverlap);
+
+    // Auto-fit detection radius to the mesh so different block sizes don't need manual re-tuning
+    if (Mesh->GetStaticMesh())
+        StackDetection->SetSphereRadius(Mesh->Bounds.SphereRadius * 1.1f);
 }
 
 void APickupObject::ToggleCarry()
@@ -67,9 +72,29 @@ void APickupObject::ToggleCarry()
     else
     {
         ACharacter* Player = UGameplayStatics::GetPlayerCharacter(this, 0);
-        if (IsValid(Player))
+        if (IsValid(Player) && !IsPlayerStandingOnTop(Player))
             PickUp(Player);
     }
+}
+
+bool APickupObject::IsPlayerStandingOnTop(ACharacter* Player) const
+{
+    UCapsuleComponent* Capsule = Player->GetCapsuleComponent();
+    if (!Capsule) return false;
+
+    const FVector Origin = Mesh->Bounds.Origin;
+    const FVector BoxExtent = Mesh->Bounds.BoxExtent;
+
+    const FVector PlayerLoc = Player->GetActorLocation();
+    const float PlayerBottomZ = PlayerLoc.Z - Capsule->GetScaledCapsuleHalfHeight();
+    const float BlockTopZ = Origin.Z + BoxExtent.Z;
+
+    const float CapsuleRadius = Capsule->GetScaledCapsuleRadius();
+    const bool bHorizontalOverlap =
+        FMath::Abs(PlayerLoc.X - Origin.X) <= BoxExtent.X + CapsuleRadius &&
+        FMath::Abs(PlayerLoc.Y - Origin.Y) <= BoxExtent.Y + CapsuleRadius;
+
+    return bHorizontalOverlap && PlayerBottomZ >= BlockTopZ - StandingOnTopTolerance;
 }
 
 void APickupObject::PickUp(ACharacter* InCarrier)
@@ -173,6 +198,9 @@ void APickupObject::StartPlacement()
 
     PickupState = EPickupState::Placing;
     bPlacementJustStarted = true;
+
+    // Query-only while placing — kinematic block shouldn't shove other dynamic pickups as it's dragged around
+    Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     PlacementRotationInput = 0.f;
     PlacementVerticalInput = 0.f;
     PlacementHeightAdjust = FMath::Clamp(GetPlacementStartHeight(), 0.f, MaxCarryDistance);
@@ -203,6 +231,7 @@ void APickupObject::ConfirmPlacement()
 
     bIsCarried = false;
     FinalizeDrop();
+    TrySnapToNearbySocket();
 }
 
 void APickupObject::CancelPlacement()
@@ -215,6 +244,8 @@ void APickupObject::CancelPlacement()
         ConfirmPlacement();
         return;
     }
+
+    Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
     PlacementIndicator->SetHiddenInGame(true);
     PlacementRotationInput = 0.f;
@@ -398,7 +429,7 @@ void APickupObject::Tick(float DeltaTime)
         const float Curved = PickupCurve
             ? PickupCurve->GetFloatValue(LerpAlpha)
             : FMath::SmoothStep(0.f, 1.f, LerpAlpha);
-        SetActorLocation(FMath::Lerp(LerpStartPosition, GetHoldPosition(), Curved));
+        SetActorLocation(FMath::Lerp(LerpStartPosition, GetHoldPosition(), Curved), true);
         if (LerpAlpha >= 1.f)
             PickupState = EPickupState::Held;
         break;
@@ -408,7 +439,7 @@ void APickupObject::Tick(float DeltaTime)
         CurrentCarryDistance = FMath::FInterpTo(CurrentCarryDistance, TargetCarryDistance, DeltaTime, CarryDistanceInterpSpeed);
         FloatTime += DeltaTime;
         const float FloatOffset = FMath::Sin(FloatTime * FloatSpeed * PI) * FloatAmplitude;
-        SetActorLocation(GetHoldPosition() + FVector(0.f, 0.f, FloatOffset));
+        SetActorLocation(GetHoldPosition() + FVector(0.f, 0.f, FloatOffset), true);
         if (CarryRotationSpeed != 0.f)
         {
             FRotator Rot = GetActorRotation();
@@ -438,7 +469,13 @@ void APickupObject::Tick(float DeltaTime)
             FHitResult Hit;
             FVector2D TargetXY;
             if (GetWorld()->LineTraceSingleByChannel(Hit, CamLoc, CamTraceEnd, ECC_Visibility, Params))
-                TargetXY = FVector2D(Hit.ImpactPoint.X, Hit.ImpactPoint.Y);
+            {
+                // Pull back along the hit normal by the block's horizontal radius so it doesn't clip into walls.
+                // Floor normals are ~vertical, so this leaves floor placement XY unchanged.
+                const float HorizontalRadius = FMath::Max(Mesh->Bounds.BoxExtent.X, Mesh->Bounds.BoxExtent.Y);
+                const FVector Adjusted = Hit.ImpactPoint + Hit.ImpactNormal * HorizontalRadius;
+                TargetXY = FVector2D(Adjusted.X, Adjusted.Y);
+            }
             else
                 TargetXY = FVector2D(CamTraceEnd.X, CamTraceEnd.Y);
 
@@ -449,13 +486,20 @@ void APickupObject::Tick(float DeltaTime)
             if (DeltaXY.Size() > CurrentCarryDistance)
                 TargetXY = PlayerXY + DeltaXY.GetSafeNormal() * CurrentCarryDistance;
 
-            // Downward trace at target XY to find the surface below
+            // Downward trace at target XY to find the surface below.
+            // Ignore other pickups so SurfaceZ doesn't flip discretely between a neighbor block's
+            // top and the floor as the target crosses its edge — that caused jittery placement.
+            FCollisionQueryParams DownParams = Params;
+            TArray<AActor*> OtherPickups;
+            UGameplayStatics::GetAllActorsOfClass(this, APickupObject::StaticClass(), OtherPickups);
+            DownParams.AddIgnoredActors(OtherPickups);
+
             const float HalfHeight = Mesh->Bounds.BoxExtent.Z;
             const FVector DownStart(TargetXY.X, TargetXY.Y, PlayerPos.Z + 5000.f);
             const FVector DownEnd  (TargetXY.X, TargetXY.Y, PlayerPos.Z - 5000.f);
             FHitResult DownHit;
             float SurfaceZ = PlayerPos.Z;
-            if (GetWorld()->LineTraceSingleByChannel(DownHit, DownStart, DownEnd, ECC_Visibility, Params))
+            if (GetWorld()->LineTraceSingleByChannel(DownHit, DownStart, DownEnd, ECC_Visibility, DownParams))
                 SurfaceZ = DownHit.ImpactPoint.Z + HalfHeight + 2.f;
 
             // Space/C accumulate height above the surface — never below it
@@ -501,6 +545,43 @@ void APickupObject::Tick(float DeltaTime)
     {
         BeamEffect->SetVariableVec3(BeamStartParamName, Carrier->GetActorLocation());
         BeamEffect->SetVariableVec3(BeamEndParamName, GetActorLocation());
+    }
+}
+
+void APickupObject::TrySnapToNearbySocket()
+{
+    TArray<FOverlapResult> Overlaps;
+    FCollisionShape Sphere = FCollisionShape::MakeSphere(PlacementSnapRadius);
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this);
+
+    GetWorld()->OverlapMultiByObjectType(Overlaps, GetActorLocation(), FQuat::Identity,
+        FCollisionObjectQueryParams(ECC_WorldDynamic), Sphere, Params);
+
+    APickupObject* Best = nullptr;
+    float BestDistSq = TNumericLimits<float>::Max();
+
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        APickupObject* Candidate = Cast<APickupObject>(Overlap.GetActor());
+        if (!IsValid(Candidate) || Candidate == this) continue;
+        if (Candidate->bIsCarried || Candidate->PickupState != EPickupState::Idle) continue;
+        if (GetActorLocation().Z < Candidate->GetActorLocation().Z) continue;
+
+        const float Radius = Candidate->StackDetection->GetScaledSphereRadius();
+        const float DistSq = FVector::DistSquared(GetActorLocation(), Candidate->TopSocket->GetComponentLocation());
+        if (DistSq > Radius * Radius) continue;
+
+        if (DistSq < BestDistSq)
+        {
+            BestDistSq = DistSq;
+            Best = Candidate;
+        }
+    }
+
+    if (Best)
+    {
+        Best->InitiateStack(this);
     }
 }
 

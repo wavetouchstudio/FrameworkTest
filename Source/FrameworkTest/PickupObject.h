@@ -134,6 +134,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (ClampMin = "0.0"))
     float ToggleCooldown = 0.4f;
 
+    // Vertical tolerance (cm) for the "player standing on top" pickup-block check
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (ClampMin = "0.0"))
+    float StandingOnTopTolerance = 10.f;
+
     // Max horizontal distance from player the object can be aimed in placement mode
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement")
     float PlacementRadius = 300.f;
@@ -169,6 +173,11 @@ public:
     // How quickly the block eases toward its traced placement position (higher = snappier, 0 = instant/no smoothing)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement", meta = (ClampMin = "0.0"))
     float PlacementPositionInterpSpeed = 12.f;
+
+    // Search radius (around this block's base) for a nearby socket to snap onto when confirming placement.
+    // The candidate block's own StackDetection sphere still gates the final snap distance.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement", meta = (ClampMin = "0.0"))
+    float PlacementSnapRadius = 80.f;
 
     // Spring arm length in placement mode (camera pulls back further)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement|Camera")
@@ -295,6 +304,7 @@ private:
     bool bThrowing = false;
     bool bPlacementJustStarted = false;
 
+    bool IsPlayerStandingOnTop(ACharacter* Player) const;
     void PickUp(ACharacter* InCarrier);
     void BeginDrop();
     void FinalizeDrop();
@@ -303,6 +313,7 @@ private:
     FVector GetDropPosition() const;
 
     void InitiateStack(APickupObject* Block);
+    void TrySnapToNearbySocket();
 
     FVector PickupLocation = FVector::ZeroVector;
     FTimerHandle HitDespawnTimer;

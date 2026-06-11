@@ -11,6 +11,7 @@ class UNiagaraSystem;
 class USpringArmComponent;
 class USceneComponent;
 class USphereComponent;
+class UCapsuleComponent;
 
 UENUM(BlueprintType)
 enum class EPickupState : uint8
@@ -89,6 +90,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry")
     float MaxCarryDistance = 500.f;
 
+    // How quickly the carry distance eases toward its target when scrolling (higher = snappier)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (ClampMin = "0.1"))
+    float CarryDistanceInterpSpeed = 8.f;
+
     // Height above player root while held (fallback only, not used when PlayerController is valid)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry")
     float CarryHeightOffset = 80.f;
@@ -145,6 +150,26 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement")
     float PlacementHeightSpeed = 100.f;
 
+    // Height above the traced surface the block starts at when entering placement mode (used if bPlacementStartHeightFromCapsule is false)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement", meta = (ClampMin = "0.0"))
+    float PlacementStartHeight = 100.f;
+
+    // If true, the placement start height is derived from the carrier's capsule height instead of PlacementStartHeight
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement")
+    bool bPlacementStartHeightFromCapsule = true;
+
+    // Multiplier applied to the carrier's capsule half-height when bPlacementStartHeightFromCapsule is true
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement", meta = (ClampMin = "0.0", EditCondition = "bPlacementStartHeightFromCapsule"))
+    float PlacementStartHeightCapsuleMultiplier = 1.f;
+
+    // Computes the starting height above the traced surface when entering placement mode. Override in Blueprint for custom logic.
+    UFUNCTION(BlueprintNativeEvent, Category = "Pickup|Placement")
+    float GetPlacementStartHeight() const;
+
+    // How quickly the block eases toward its traced placement position (higher = snappier, 0 = instant/no smoothing)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement", meta = (ClampMin = "0.0"))
+    float PlacementPositionInterpSpeed = 12.f;
+
     // Spring arm length in placement mode (camera pulls back further)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Placement|Camera")
     float PlacementCameraArmLength = 800.f;
@@ -195,7 +220,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Pickup|Placement")
     void CancelPlacement();
 
-    // While Placing: fires the held block as a projectile in the camera aim direction
+    // While Held: fires the held block as a projectile in the camera aim direction
     UFUNCTION(BlueprintCallable, Category = "Pickup|Placement")
     void ThrowBlock();
 
@@ -265,6 +290,7 @@ private:
     float PlacementHeightAdjust = 0.f;
     int32 DefaultJumpMaxCount = 1;
     float CurrentCarryDistance = 0.f;
+    float TargetCarryDistance = 0.f;
     FVector LerpStartPosition = FVector::ZeroVector;
     bool bThrowing = false;
     bool bPlacementJustStarted = false;

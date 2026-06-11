@@ -10,6 +10,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "PuzzleTrigger.h"
 
 APickupObject::APickupObject()
@@ -78,6 +79,7 @@ void APickupObject::PickUp(ACharacter* InCarrier)
     FloatTime = 0.f;
     LerpAlpha = 0.f;
     CurrentCarryDistance = CarryForwardDistance;
+    TargetCarryDistance = CarryForwardDistance;
     LerpStartPosition = GetActorLocation();
     PickupLocation = GetActorLocation();
     PickupState = EPickupState::LerpingToHold;
@@ -166,13 +168,14 @@ void APickupObject::StartPlacement()
         FVector CamLoc; FRotator CamRot;
         PC->GetPlayerViewPoint(CamLoc, CamRot);
         CurrentCarryDistance = FMath::Clamp(FVector::Dist(GetActorLocation(), CamLoc), MinCarryDistance, MaxCarryDistance);
+        TargetCarryDistance = CurrentCarryDistance;
     }
 
     PickupState = EPickupState::Placing;
     bPlacementJustStarted = true;
     PlacementRotationInput = 0.f;
     PlacementVerticalInput = 0.f;
-    PlacementHeightAdjust = 0.f;
+    PlacementHeightAdjust = FMath::Clamp(GetPlacementStartHeight(), 0.f, MaxCarryDistance);
     PlacementIndicator->SetHiddenInGame(false);
 
     if (IsValid(Carrier))
@@ -218,6 +221,7 @@ void APickupObject::CancelPlacement()
     PlacementVerticalInput = 0.f;
     PlacementHeightAdjust = 0.f;
     CurrentCarryDistance = CarryForwardDistance;
+    TargetCarryDistance = CarryForwardDistance;
     FloatTime = 0.f;
 
     LerpStartPosition = GetActorLocation();
@@ -236,7 +240,7 @@ void APickupObject::CancelPlacement()
 
 void APickupObject::ThrowBlock()
 {
-    if (PickupState != EPickupState::Placing) return;
+    if (PickupState != EPickupState::Held) return;
 
     PlacementIndicator->SetHiddenInGame(true);
 
@@ -248,7 +252,6 @@ void APickupObject::ThrowBlock()
             FVector CamLoc; FRotator CamRot;
             PC->GetPlayerViewPoint(CamLoc, CamRot);
             ThrowVelocity = CamRot.Vector() * ThrowSpeed + FVector(0.f, 0.f, ThrowArcZ);
-            PC->SetControlRotation(FRotator(DefaultControllerPitch, PC->GetControlRotation().Yaw, 0.f));
         }
     }
 
@@ -286,7 +289,17 @@ FVector APickupObject::GetHoldPosition() const
 void APickupObject::AdjustCarryDistance(float Delta)
 {
     if (PickupState != EPickupState::Placing) return;
-    CurrentCarryDistance = FMath::Clamp(CurrentCarryDistance + Delta, MinCarryDistance, MaxCarryDistance);
+    TargetCarryDistance = FMath::Clamp(TargetCarryDistance + Delta, MinCarryDistance, MaxCarryDistance);
+}
+
+float APickupObject::GetPlacementStartHeight_Implementation() const
+{
+    if (bPlacementStartHeightFromCapsule && IsValid(Carrier))
+    {
+        if (UCapsuleComponent* Capsule = Carrier->GetCapsuleComponent())
+            return Capsule->GetScaledCapsuleHalfHeight() * 2.f * PlacementStartHeightCapsuleMultiplier;
+    }
+    return PlacementStartHeight;
 }
 
 FVector APickupObject::GetDropPosition() const
@@ -392,6 +405,7 @@ void APickupObject::Tick(float DeltaTime)
     }
     case EPickupState::Held:
     {
+        CurrentCarryDistance = FMath::FInterpTo(CurrentCarryDistance, TargetCarryDistance, DeltaTime, CarryDistanceInterpSpeed);
         FloatTime += DeltaTime;
         const float FloatOffset = FMath::Sin(FloatTime * FloatSpeed * PI) * FloatAmplitude;
         SetActorLocation(GetHoldPosition() + FVector(0.f, 0.f, FloatOffset));
@@ -405,6 +419,8 @@ void APickupObject::Tick(float DeltaTime)
     }
     case EPickupState::Placing:
     {
+        CurrentCarryDistance = FMath::FInterpTo(CurrentCarryDistance, TargetCarryDistance, DeltaTime, CarryDistanceInterpSpeed);
+
         APlayerController* PC = Cast<APlayerController>(Carrier->GetController());
         if (IsValid(PC))
         {
@@ -451,7 +467,11 @@ void APickupObject::Tick(float DeltaTime)
 
             FloatTime += DeltaTime;
             const float FloatOffset = FMath::Sin(FloatTime * FloatSpeed * PI) * FloatAmplitude;
-            SetActorLocation(FVector(TargetXY.X, TargetXY.Y, SurfaceZ + PlacementHeightAdjust + FloatOffset));
+            const FVector TargetLocation(TargetXY.X, TargetXY.Y, SurfaceZ + PlacementHeightAdjust + FloatOffset);
+            const FVector NewLocation = PlacementPositionInterpSpeed > 0.f
+                ? FMath::VInterpTo(GetActorLocation(), TargetLocation, DeltaTime, PlacementPositionInterpSpeed)
+                : TargetLocation;
+            SetActorLocation(NewLocation);
         }
 
         if (PlacementRotationInput != 0.f)

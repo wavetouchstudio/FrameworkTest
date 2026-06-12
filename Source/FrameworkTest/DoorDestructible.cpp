@@ -79,7 +79,7 @@ void ADoorDestructible::SpawnDebris()
         // Auto-destroy after DebrisLifetime seconds
         Piece->SetLifeSpan(DebrisLifetime);
 
-        UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Piece->GetRootComponent());
+        UPrimitiveComponent* Prim = Piece->FindComponentByClass<UPrimitiveComponent>();
         if (Prim)
         {
             // Debris shouldn't push the player or pull the camera spring arm

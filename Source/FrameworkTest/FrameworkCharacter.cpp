@@ -269,10 +269,6 @@ void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
         return;
     }
 
-    if (!bIsWallSliding)
-    {
-        WallSlideElapsedTime = 0.f;
-    }
     WallSlideElapsedTime += DeltaTime;
 
     bIsWallSliding = true;
@@ -287,6 +283,7 @@ void AFrameworkCharacter::EndWallSlide()
 {
     bIsWallSliding = false;
     WallSlideNormal = FVector::ZeroVector;
+    WallSlideElapsedTime = 0.f;
 }
 
 bool AFrameworkCharacter::TraceForLedge(FHitResult& OutWallHit, FVector& OutLedgeSurfacePoint) const

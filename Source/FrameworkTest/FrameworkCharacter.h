@@ -71,6 +71,10 @@ struct FCharacterMovementProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float WallApproachDotThreshold = 0.3f;
 
+    // Max seconds a wall slide can be held before falling off; <= 0 means unlimited
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float WallSlideMaxDuration = 0.f;
+
     // --- Wall Jump ---
     // Total launch speed (magnitude) on a wall jump
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
@@ -79,6 +83,13 @@ struct FCharacterMovementProfile
     // Launch angle measured from horizontal (0 = straight along wall normal, 90 = straight up)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0", ClampMax = "90.0"))
     float WallJumpAngle = 65.f;
+
+    // --- Interaction Toggles ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnableCarry = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnablePlacementMode = true;
 };
 
 UCLASS(Blueprintable)
@@ -242,6 +253,7 @@ private:
     // --- Wall Slide state ---
     bool bIsWallSliding = false;
     FVector WallSlideNormal = FVector::ZeroVector;
+    float WallSlideElapsedTime = 0.f;
 
     // --- Fall Damage state ---
     float PeakFallSpeed = 0.f;

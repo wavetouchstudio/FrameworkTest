@@ -131,8 +131,9 @@ void AFrameworkCharacter::RequestJump()
 
     if (bIsWallSliding && MovementProfiles[CurrentProfileIndex].bEnableWallJump)
     {
-        const float AngleRad = FMath::DegreesToRadians(WallJumpAngle);
-        const FVector LaunchVelocity = WallSlideNormal * (WallJumpSpeed * FMath::Cos(AngleRad)) + FVector(0.f, 0.f, WallJumpSpeed * FMath::Sin(AngleRad));
+        const FCharacterMovementProfile& WallJumpProfile = MovementProfiles[CurrentProfileIndex];
+        const float AngleRad = FMath::DegreesToRadians(WallJumpProfile.WallJumpAngle);
+        const FVector LaunchVelocity = WallSlideNormal * (WallJumpProfile.WallJumpSpeed * FMath::Cos(AngleRad)) + FVector(0.f, 0.f, WallJumpProfile.WallJumpSpeed * FMath::Sin(AngleRad));
         EndWallSlide();
 
         bJumpedThisAirtime = true;
@@ -172,6 +173,7 @@ void AFrameworkCharacter::Landed(const FHitResult& Hit)
     {
         EndWallSlide();
     }
+    WallSlideElapsedTime = 0.f;
 
     if (bIsLedgeHanging)
     {
@@ -216,8 +218,9 @@ void AFrameworkCharacter::TraceForWall(FHitResult& OutHit) const
 void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
 {
     UCharacterMovementComponent* Movement = GetCharacterMovement();
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
 
-    if (!MovementProfiles[CurrentProfileIndex].bEnableWallSlide)
+    if (!Profile.bEnableWallSlide)
     {
         if (bIsWallSliding)
         {
@@ -226,7 +229,7 @@ void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
         return;
     }
 
-    if (Movement->Velocity.Z >= -WallSlideMinFallSpeed)
+    if (Movement->Velocity.Z >= -Profile.WallSlideMinFallSpeed)
     {
         if (bIsWallSliding)
         {
@@ -248,7 +251,7 @@ void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
     }
 
     const float ApproachDot = FVector::DotProduct(GetActorForwardVector(), -WallHit.Normal);
-    if (ApproachDot < WallApproachDotThreshold)
+    if (ApproachDot < Profile.WallApproachDotThreshold)
     {
         if (bIsWallSliding)
         {
@@ -257,11 +260,26 @@ void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
         return;
     }
 
+    if (Profile.WallSlideMaxDuration > 0.f && WallSlideElapsedTime >= Profile.WallSlideMaxDuration)
+    {
+        if (bIsWallSliding)
+        {
+            EndWallSlide();
+        }
+        return;
+    }
+
+    if (!bIsWallSliding)
+    {
+        WallSlideElapsedTime = 0.f;
+    }
+    WallSlideElapsedTime += DeltaTime;
+
     bIsWallSliding = true;
     WallSlideNormal = WallHit.Normal;
 
     FVector Velocity = Movement->Velocity;
-    Velocity.Z = FMath::Max(Velocity.Z, -WallSlideSpeed);
+    Velocity.Z = FMath::Max(Velocity.Z, -Profile.WallSlideSpeed);
     Movement->Velocity = Velocity;
 }
 
@@ -427,6 +445,13 @@ void AFrameworkCharacter::SetMovementProfile(int32 ProfileIndex)
     if (UCharacterMovementComponent* Movement = GetCharacterMovement())
     {
         Movement->JumpZVelocity = Profile.JumpZVelocity;
+        Movement->AirControl = Profile.AirControl;
+        Movement->GravityScale = Profile.GravityScale;
+        Movement->MaxAcceleration = Profile.MaxAcceleration;
+        Movement->BrakingDecelerationWalking = Profile.BrakingDecelerationWalking;
+        Movement->RotationRate = FRotator(0.f, Profile.RotationYawRate, 0.f);
+        Movement->bOrientRotationToMovement = Profile.bOrientRotationToMovement;
+        bUseControllerRotationYaw = Profile.bUseControllerRotationYawSetting;
     }
 
     ApplyWalkSpeed();

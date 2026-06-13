@@ -57,6 +57,18 @@ void AFrameworkCharacter::BeginPlay()
     CurrentHealth = MaxHealth;
     UpdateHealthDebugDisplay();
     SetMovementProfile(CurrentProfileIndex);
+
+    if (InteractPromptWidgetClass)
+    {
+        if (APlayerController* PC = Cast<APlayerController>(GetController()))
+        {
+            InteractPromptWidget = CreateWidget<UUserWidget>(PC, InteractPromptWidgetClass);
+            if (InteractPromptWidget)
+            {
+                InteractPromptWidget->AddToViewport();
+            }
+        }
+    }
 }
 
 void AFrameworkCharacter::Tick(float DeltaTime)

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Blueprint/UserWidget.h"
 #include "FrameworkCharacter.generated.h"
 
 USTRUCT(BlueprintType)
@@ -234,6 +235,14 @@ public:
     UFUNCTION(BlueprintNativeEvent, Category = "Fall Damage")
     void ApplyFallDamage(float Damage);
     virtual void ApplyFallDamage_Implementation(float Damage);
+
+    // --- Interact Prompt UI ---
+    // Widget class shown while CurrentInteractable/bCanInteract is set (assign in BP)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UUserWidget> InteractPromptWidgetClass;
+
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    UUserWidget* InteractPromptWidget = nullptr;
 
 protected:
     virtual void BeginPlay() override;

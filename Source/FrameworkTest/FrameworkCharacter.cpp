@@ -2,27 +2,61 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 
 AFrameworkCharacter::AFrameworkCharacter()
 {
-    UCharacterMovementComponent* Movement = GetCharacterMovement();
-
-    Movement->MaxWalkSpeed = MaxWalkSpeed;
-    Movement->JumpZVelocity = JumpZVelocity;
-    Movement->AirControl = AirControl;
-    Movement->GravityScale = GravityScale;
-    Movement->MaxAcceleration = MaxAcceleration;
-    Movement->BrakingDecelerationWalking = BrakingDecelerationWalking;
-    Movement->RotationRate = FRotator(0.f, RotationYawRate, 0.f);
-    Movement->bOrientRotationToMovement = bOrientRotationToMovement;
-
-    bUseControllerRotationYaw = bUseControllerRotationYawSetting;
-
     // 2, not 1: engine's CanJumpInternal() blocks Jump() while falling with
     // JumpCurrentCount==0 unless JumpCurrentCount+1 < JumpMaxCount. Needed for
     // coyote-time jumps (falling, but no jump performed yet). Our own
     // bJumpedThisAirtime/bDoubleJumpUsed flags gate everything else.
     JumpMaxCount = 2;
+
+    FCharacterMovementProfile Profile0;
+    Profile0.CapsuleScale = 1.f;
+    Profile0.Mass = 80.f;
+    Profile0.WalkSpeed = 550.f;
+    Profile0.SprintSpeed = 850.f;
+    Profile0.JumpZVelocity = 1400.f;
+    Profile0.DoubleJumpZVelocity = 1400.f;
+    Profile0.bEnableWallJump = true;
+    Profile0.bEnableWallSlide = true;
+    Profile0.bWallJumpResetsDoubleJump = true;
+    MovementProfiles.Add(Profile0);
+
+    FCharacterMovementProfile Profile1;
+    Profile1.CapsuleScale = 1.f;
+    Profile1.Mass = 80.f;
+    Profile1.WalkSpeed = 550.f;
+    Profile1.SprintSpeed = 850.f;
+    Profile1.JumpZVelocity = 1400.f;
+    Profile1.DoubleJumpZVelocity = 1400.f;
+    Profile1.bEnableWallJump = true;
+    Profile1.bEnableWallSlide = true;
+    Profile1.bWallJumpResetsDoubleJump = false;
+    MovementProfiles.Add(Profile1);
+
+    FCharacterMovementProfile Profile2;
+    Profile2.CapsuleScale = 1.3f;
+    Profile2.Mass = 140.f;
+    Profile2.WalkSpeed = 450.f;
+    Profile2.SprintSpeed = 700.f;
+    Profile2.JumpZVelocity = 1200.f;
+    Profile2.DoubleJumpZVelocity = 1200.f;
+    Profile2.bEnableWallJump = false;
+    Profile2.bEnableWallSlide = true;
+    Profile2.bWallJumpResetsDoubleJump = true;
+    Profile2.bEnableDoubleJump = false;
+    MovementProfiles.Add(Profile2);
+}
+
+void AFrameworkCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+
+    CurrentHealth = MaxHealth;
+    UpdateHealthDebugDisplay();
+    SetMovementProfile(CurrentProfileIndex);
 }
 
 void AFrameworkCharacter::Tick(float DeltaTime)
@@ -34,16 +68,20 @@ void AFrameworkCharacter::Tick(float DeltaTime)
     if (bIsLedgeHanging)
     {
         UpdateLedgeHang(DeltaTime);
+        UpdateMechanicDebugDisplay();
         return;
     }
 
     if (Movement->IsFalling())
     {
+        PeakFallSpeed = FMath::Max(PeakFallSpeed, -Movement->Velocity.Z);
+
         FHitResult LedgeWallHit;
         FVector LedgeSurfacePoint;
         if (TraceForLedge(LedgeWallHit, LedgeSurfacePoint))
         {
             EnterLedgeHang(LedgeWallHit, LedgeSurfacePoint);
+            UpdateMechanicDebugDisplay();
             return;
         }
 
@@ -53,6 +91,8 @@ void AFrameworkCharacter::Tick(float DeltaTime)
     {
         EndWallSlide();
     }
+
+    UpdateMechanicDebugDisplay();
 }
 
 void AFrameworkCharacter::RequestJump()
@@ -85,17 +125,21 @@ void AFrameworkCharacter::RequestJump()
 
         bDoubleJumpUsed = false;
         bJumpedThisAirtime = false;
+        PeakFallSpeed = 0.f;
         return;
     }
 
-    if (bIsWallSliding)
+    if (bIsWallSliding && MovementProfiles[CurrentProfileIndex].bEnableWallJump)
     {
         const float AngleRad = FMath::DegreesToRadians(WallJumpAngle);
         const FVector LaunchVelocity = WallSlideNormal * (WallJumpSpeed * FMath::Cos(AngleRad)) + FVector(0.f, 0.f, WallJumpSpeed * FMath::Sin(AngleRad));
         EndWallSlide();
 
-        StoredJumpZVelocity = Movement->JumpZVelocity;
         bJumpedThisAirtime = true;
+        if (MovementProfiles[CurrentProfileIndex].bWallJumpResetsDoubleJump)
+        {
+            bDoubleJumpUsed = false;
+        }
         LaunchCharacter(LaunchVelocity, true, true);
         return;
     }
@@ -106,16 +150,15 @@ void AFrameworkCharacter::RequestJump()
 
     if (bGrounded || bCoyoteWindow)
     {
-        StoredJumpZVelocity = Movement->JumpZVelocity;
         FirstJumpTime = GetWorld()->GetTimeSeconds();
         bDoubleJumpUsed = false;
         bJumpedThisAirtime = true;
         Jump();
     }
-    else if (!bDoubleJumpUsed && (GetWorld()->GetTimeSeconds() - FirstJumpTime) >= DoubleJumpDelay)
+    else if (!bIsWallSliding && MovementProfiles[CurrentProfileIndex].bEnableDoubleJump && !bDoubleJumpUsed && (GetWorld()->GetTimeSeconds() - FirstJumpTime) >= DoubleJumpDelay)
     {
         bDoubleJumpUsed = true;
-        LaunchCharacter(FVector(0.f, 0.f, StoredJumpZVelocity), false, true);
+        LaunchCharacter(FVector(0.f, 0.f, MovementProfiles[CurrentProfileIndex].DoubleJumpZVelocity), false, true);
     }
 }
 
@@ -134,6 +177,16 @@ void AFrameworkCharacter::Landed(const FHitResult& Hit)
     {
         ExitLedgeHang();
     }
+
+    if (PeakFallSpeed > FallDamageSafeSpeed)
+    {
+        const float ExcessSpeed = PeakFallSpeed - FallDamageSafeSpeed;
+        const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+        const float Damage = ExcessSpeed * FallDamageRatePerUnit
+            * (Profile.Mass / FallDamageReferenceMass) * GetFallDamageMultiplier();
+        ApplyFallDamage(Damage);
+    }
+    PeakFallSpeed = 0.f;
 }
 
 void AFrameworkCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
@@ -163,6 +216,15 @@ void AFrameworkCharacter::TraceForWall(FHitResult& OutHit) const
 void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
 {
     UCharacterMovementComponent* Movement = GetCharacterMovement();
+
+    if (!MovementProfiles[CurrentProfileIndex].bEnableWallSlide)
+    {
+        if (bIsWallSliding)
+        {
+            EndWallSlide();
+        }
+        return;
+    }
 
     if (Movement->Velocity.Z >= -WallSlideMinFallSpeed)
     {
@@ -329,6 +391,7 @@ void AFrameworkCharacter::EnterLedgeHang(const FHitResult& WallHit, const FVecto
 
     bDoubleJumpUsed = false;
     bJumpedThisAirtime = false;
+    PeakFallSpeed = 0.f;
 }
 
 void AFrameworkCharacter::ExitLedgeHang()
@@ -342,4 +405,155 @@ void AFrameworkCharacter::ExitLedgeHang()
     {
         Movement->SetMovementMode(MOVE_Falling);
     }
+}
+
+void AFrameworkCharacter::SetMovementProfile(int32 ProfileIndex)
+{
+    if (MovementProfiles.Num() == 0)
+    {
+        return;
+    }
+
+    CurrentProfileIndex = FMath::Clamp(ProfileIndex, 0, MovementProfiles.Num() - 1);
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+
+    SetActorScale3D(FVector(Profile.CapsuleScale));
+
+    if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+    {
+        Capsule->SetMassOverrideInKg(NAME_None, Profile.Mass, true);
+    }
+
+    if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+    {
+        Movement->JumpZVelocity = Profile.JumpZVelocity;
+    }
+
+    ApplyWalkSpeed();
+    UpdateProfileDebugDisplay();
+}
+
+void AFrameworkCharacter::ApplyWalkSpeed()
+{
+    if (MovementProfiles.Num() == 0)
+    {
+        return;
+    }
+
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (!Movement)
+    {
+        return;
+    }
+
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+    Movement->MaxWalkSpeed = bIsSprinting ? Profile.SprintSpeed : Profile.WalkSpeed;
+}
+
+void AFrameworkCharacter::SetSprinting(bool bNewSprinting)
+{
+    bIsSprinting = bNewSprinting;
+    ApplyWalkSpeed();
+}
+
+void AFrameworkCharacter::UpdateProfileDebugDisplay() const
+{
+    if (!GEngine)
+    {
+        return;
+    }
+
+    GEngine->AddOnScreenDebugMessage(7725, 5.f, FColor::Cyan,
+        FString::Printf(TEXT("Movement Profile: %d"), CurrentProfileIndex));
+}
+
+void AFrameworkCharacter::AddFallDamageModifier(FName ModifierID, float MultiplierDelta)
+{
+    FallDamageModifiers.Add(ModifierID, MultiplierDelta);
+}
+
+void AFrameworkCharacter::RemoveFallDamageModifier(FName ModifierID)
+{
+    FallDamageModifiers.Remove(ModifierID);
+}
+
+float AFrameworkCharacter::GetFallDamageMultiplier() const
+{
+    float Multiplier = 1.f;
+    for (const TPair<FName, float>& Modifier : FallDamageModifiers)
+    {
+        Multiplier += Modifier.Value;
+    }
+    return FMath::Max(Multiplier, 0.f);
+}
+
+void AFrameworkCharacter::ApplyFallDamage_Implementation(float Damage)
+{
+    CurrentHealth -= Damage;
+
+    if (CurrentHealth <= 0.f)
+    {
+        CurrentHealth = MaxHealth;
+    }
+
+    UpdateHealthDebugDisplay();
+}
+
+void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
+{
+    if (!bShowMechanicDebugText || !GEngine)
+    {
+        return;
+    }
+
+    FString StateText;
+    FColor StateColor = FColor::White;
+
+    if (bIsInPlacementMode)
+    {
+        StateText = TEXT("Placement Mode");
+        StateColor = FColor::Cyan;
+    }
+    else if (bIsHoldingObject)
+    {
+        StateText = TEXT("Holding");
+        StateColor = FColor::Cyan;
+    }
+    else if (bIsLedgeHanging)
+    {
+        StateText = TEXT("Ledge Hang");
+        StateColor = FColor::Green;
+    }
+    else if (bIsWallSliding)
+    {
+        StateText = TEXT("Wall Slide");
+        StateColor = FColor::Yellow;
+    }
+    else if (bDoubleJumpUsed)
+    {
+        StateText = TEXT("Jump 2 (Double Jump)");
+        StateColor = FColor::Orange;
+    }
+    else if (bJumpedThisAirtime)
+    {
+        StateText = TEXT("Jump 1");
+        StateColor = FColor::Orange;
+    }
+    else
+    {
+        StateText = TEXT("Normal");
+        StateColor = FColor::White;
+    }
+
+    GEngine->AddOnScreenDebugMessage(7723, 0.f, StateColor, FString::Printf(TEXT("Mechanic State: %s"), *StateText));
+}
+
+void AFrameworkCharacter::UpdateHealthDebugDisplay() const
+{
+    if (!GEngine)
+    {
+        return;
+    }
+
+    GEngine->AddOnScreenDebugMessage(7724, 5.f, FColor::Red, FString::Printf(TEXT("Health: %.0f / %.0f"), CurrentHealth, MaxHealth));
 }

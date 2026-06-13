@@ -4,6 +4,83 @@
 #include "GameFramework/Character.h"
 #include "FrameworkCharacter.generated.h"
 
+USTRUCT(BlueprintType)
+struct FCharacterMovementProfile
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float CapsuleScale = 1.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Mass = 80.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float WalkSpeed = 550.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float SprintSpeed = 850.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float JumpZVelocity = 1400.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float DoubleJumpZVelocity = 1400.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnableWallJump = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnableWallSlide = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bWallJumpResetsDoubleJump = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnableDoubleJump = true;
+
+    // --- Movement Feel ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float AirControl = 0.3f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float GravityScale = 4.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float MaxAcceleration = 1500.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float BrakingDecelerationWalking = 2000.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float RotationYawRate = 750.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bOrientRotationToMovement = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bUseControllerRotationYawSetting = false;
+
+    // --- Wall Slide ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float WallSlideMinFallSpeed = 200.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float WallSlideSpeed = 150.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float WallApproachDotThreshold = 0.3f;
+
+    // --- Wall Jump ---
+    // Total launch speed (magnitude) on a wall jump
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float WallJumpSpeed = 1300.f;
+
+    // Launch angle measured from horizontal (0 = straight along wall normal, 90 = straight up)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0", ClampMax = "90.0"))
+    float WallJumpAngle = 65.f;
+};
+
 UCLASS(Blueprintable)
 class FRAMEWORKTEST_API AFrameworkCharacter : public ACharacter
 {
@@ -11,34 +88,6 @@ class FRAMEWORKTEST_API AFrameworkCharacter : public ACharacter
 
 public:
     AFrameworkCharacter();
-
-    // --- Movement Tuning (applied to CharacterMovement in constructor) ---
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float MaxWalkSpeed = 550.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float JumpZVelocity = 1400.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float AirControl = 0.3f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float GravityScale = 4.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float MaxAcceleration = 1500.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float BrakingDecelerationWalking = 2000.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    float RotationYawRate = 750.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    bool bOrientRotationToMovement = true;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning")
-    bool bUseControllerRotationYawSetting = false;
 
     // --- Double Jump ---
     // Min seconds after the first jump before a double jump can trigger
@@ -48,6 +97,10 @@ public:
     // Call from Blueprint's IA_Jump "Started" event (replaces the old Jump()/LaunchCharacter graph)
     UFUNCTION(BlueprintCallable, Category = "Movement")
     void RequestJump();
+
+    // Call from Blueprint's IA_Sprint "Started"/"Completed" events (true on Started, false on Completed)
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    void SetSprinting(bool bNewSprinting);
 
     // Grace period after walking off a ledge where a jump still counts as a ground jump
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Double Jump", meta = (ClampMin = "0.0"))
@@ -61,27 +114,6 @@ public:
     // Forward distance to check for a wall
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Slide", meta = (ClampMin = "0.0"))
     float WallTraceDistance = 60.f;
-
-    // Minimum downward speed before wall sliding can engage
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Slide", meta = (ClampMin = "0.0"))
-    float WallSlideMinFallSpeed = 200.f;
-
-    // Downward speed clamp while wall sliding
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Slide", meta = (ClampMin = "0.0"))
-    float WallSlideSpeed = 150.f;
-
-    // Minimum dot(forward, -wallNormal) to count as "facing" the wall
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Slide", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float WallApproachDotThreshold = 0.3f;
-
-    // --- Wall Jump ---
-    // Total launch speed (magnitude) on a wall jump
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Jump", meta = (ClampMin = "0.0"))
-    float WallJumpSpeed = 1300.f;
-
-    // Launch angle measured from horizontal (0 = straight along wall normal, 90 = straight up)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Jump", meta = (ClampMin = "0.0", ClampMax = "90.0"))
-    float WallJumpAngle = 65.f;
 
     // --- Ledge Hang ---
     // Height above the capsule's feet where the hand/wall trace is performed
@@ -132,7 +164,68 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Ledge Hang")
     bool bDebugDrawLedgeTraces = false;
 
+    // --- Mechanic State Debug Display ---
+    // Show an on-screen text indicator for the player's current mechanic/state
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowMechanicDebugText = true;
+
+    // Set by Blueprint when the player picks up/holds a carryable object
+    UPROPERTY(BlueprintReadWrite, Category = "Debug")
+    bool bIsHoldingObject = false;
+
+    // Set by Blueprint when the player enters block-placement mode
+    UPROPERTY(BlueprintReadWrite, Category = "Debug")
+    bool bIsInPlacementMode = false;
+
+    // --- Test Health Pool ---
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug|Health")
+    float MaxHealth = 100.f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Debug|Health")
+    float CurrentHealth = 100.f;
+
+    // --- Movement Profiles ---
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement Profiles")
+    TArray<FCharacterMovementProfile> MovementProfiles;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Movement Profiles")
+    int32 CurrentProfileIndex = 0;
+
+    UFUNCTION(BlueprintCallable, Category = "Movement Profiles")
+    void SetMovementProfile(int32 ProfileIndex);
+
+    // --- Fall Damage ---
+    // Downward speed (cm/s) below which no fall damage is taken
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fall Damage", meta = (ClampMin = "0.0"))
+    float FallDamageSafeSpeed = 1400.f;
+
+    // Damage per unit of fall speed above the safe speed
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fall Damage", meta = (ClampMin = "0.0"))
+    float FallDamageRatePerUnit = 0.05f;
+
+    // Mass at which the fall damage rate is considered "1x"
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fall Damage", meta = (ClampMin = "0.0"))
+    float FallDamageReferenceMass = 80.f;
+
+    // Add or update a runtime fall damage multiplier modifier (e.g. from items/skills)
+    UFUNCTION(BlueprintCallable, Category = "Fall Damage")
+    void AddFallDamageModifier(FName ModifierID, float MultiplierDelta);
+
+    // Remove a runtime fall damage multiplier modifier
+    UFUNCTION(BlueprintCallable, Category = "Fall Damage")
+    void RemoveFallDamageModifier(FName ModifierID);
+
+    // Current combined fall damage multiplier (1 + sum of active modifiers, clamped >= 0)
+    UFUNCTION(BlueprintCallable, Category = "Fall Damage")
+    float GetFallDamageMultiplier() const;
+
+    // Called when fall damage should be applied. Override in Blueprint to hook up a health system.
+    UFUNCTION(BlueprintNativeEvent, Category = "Fall Damage")
+    void ApplyFallDamage(float Damage);
+    virtual void ApplyFallDamage_Implementation(float Damage);
+
 protected:
+    virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
     virtual void Landed(const FHitResult& Hit) override;
     virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode) override;
@@ -140,17 +233,27 @@ protected:
 private:
     bool bDoubleJumpUsed = false;
     bool bJumpedThisAirtime = false;
-    float StoredJumpZVelocity = 0.f;
+    bool bIsSprinting = false;
     float FirstJumpTime = -1000.f;
     float LeftGroundTime = -1000.f;
+
+    void ApplyWalkSpeed();
 
     // --- Wall Slide state ---
     bool bIsWallSliding = false;
     FVector WallSlideNormal = FVector::ZeroVector;
 
+    // --- Fall Damage state ---
+    float PeakFallSpeed = 0.f;
+    TMap<FName, float> FallDamageModifiers;
+
     void TraceForWall(FHitResult& OutHit) const;
     void UpdateWallSlide(float DeltaTime);
     void EndWallSlide();
+
+    void UpdateMechanicDebugDisplay() const;
+    void UpdateHealthDebugDisplay() const;
+    void UpdateProfileDebugDisplay() const;
 
     // --- Ledge Hang state ---
     bool bIsLedgeHanging = false;

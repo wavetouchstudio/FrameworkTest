@@ -3,6 +3,11 @@
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "NiagaraComponent.h"
+#include "CableComponent.h"
+#include "GrappleAnchor.h"
+#include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
 
 AFrameworkCharacter::AFrameworkCharacter()
 {
@@ -48,6 +53,20 @@ AFrameworkCharacter::AFrameworkCharacter()
     Profile2.bWallJumpResetsDoubleJump = true;
     Profile2.bEnableDoubleJump = false;
     MovementProfiles.Add(Profile2);
+
+    GlideTrailEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("GlideTrailEffect"));
+    GlideTrailEffect->SetupAttachment(GetMesh());
+    GlideTrailEffect->SetHiddenInGame(true);
+    GlideTrailEffect->bAutoActivate = false;
+
+    GrappleCable = CreateDefaultSubobject<UCableComponent>(TEXT("GrappleCable"));
+    GrappleCable->SetupAttachment(GetMesh());
+    GrappleCable->SetVisibility(false);
+
+    GrappleBeamEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("GrappleBeamEffect"));
+    GrappleBeamEffect->SetupAttachment(GetMesh());
+    GrappleBeamEffect->SetHiddenInGame(true);
+    GrappleBeamEffect->bAutoActivate = false;
 }
 
 void AFrameworkCharacter::BeginPlay()
@@ -55,6 +74,7 @@ void AFrameworkCharacter::BeginPlay()
     Super::BeginPlay();
 
     CurrentHealth = MaxHealth;
+    GlideTimeRemaining = GlideMaxDuration;
     UpdateHealthDebugDisplay();
     SetMovementProfile(CurrentProfileIndex);
 
@@ -77,6 +97,13 @@ void AFrameworkCharacter::Tick(float DeltaTime)
 
     UCharacterMovementComponent* Movement = GetCharacterMovement();
 
+    if (bIsGrappling)
+    {
+        UpdateGrapple(DeltaTime);
+        UpdateMechanicDebugDisplay();
+        return;
+    }
+
     if (bIsLedgeHanging)
     {
         UpdateLedgeHang(DeltaTime);
@@ -98,12 +125,26 @@ void AFrameworkCharacter::Tick(float DeltaTime)
         }
 
         UpdateWallSlide(DeltaTime);
+        UpdateGlide(DeltaTime);
     }
-    else if (bIsWallSliding)
+    else
     {
-        EndWallSlide();
+        if (bIsWallSliding)
+        {
+            EndWallSlide();
+        }
+        if (bIsGliding)
+        {
+            EndGlide();
+        }
     }
 
+    if (!bIsGliding)
+    {
+        GlideTimeRemaining = FMath::Min(GlideMaxDuration, GlideTimeRemaining + GlideRechargeRate * DeltaTime);
+    }
+
+    UpdateGrappleTargeting();
     UpdateMechanicDebugDisplay();
 }
 
@@ -192,6 +233,11 @@ void AFrameworkCharacter::Landed(const FHitResult& Hit)
         ExitLedgeHang();
     }
 
+    if (bIsGliding)
+    {
+        EndGlide();
+    }
+
     if (PeakFallSpeed > FallDamageSafeSpeed)
     {
         const float ExcessSpeed = PeakFallSpeed - FallDamageSafeSpeed;
@@ -215,6 +261,11 @@ void AFrameworkCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, 
     if (PrevMovementMode == MOVE_Flying && bIsLedgeHanging)
     {
         ExitLedgeHang();
+    }
+
+    if (PrevMovementMode == MOVE_Flying && bIsGrappling)
+    {
+        EndGrapple();
     }
 }
 
@@ -434,6 +485,200 @@ void AFrameworkCharacter::ExitLedgeHang()
     }
 }
 
+void AFrameworkCharacter::UpdateGlide(float DeltaTime)
+{
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+
+    if (!bWantsGlide || !Profile.bEnableGlide || GlideTimeRemaining <= 0.f || bIsWallSliding)
+    {
+        if (bIsGliding)
+        {
+            EndGlide();
+        }
+        return;
+    }
+
+    if (!bIsGliding)
+    {
+        bIsGliding = true;
+        GlideTrailEffect->SetHiddenInGame(false);
+        GlideTrailEffect->Activate(true);
+    }
+
+    GlideTimeRemaining = FMath::Max(0.f, GlideTimeRemaining - DeltaTime);
+
+    FVector Velocity = Movement->Velocity;
+    if (Velocity.Z < -GlideMaxFallSpeed)
+    {
+        Velocity.Z = FMath::FInterpTo(Velocity.Z, -GlideMaxFallSpeed, DeltaTime, GlideZInterpSpeed);
+    }
+    if (GlideForwardSpeed > 0.f)
+    {
+        const FVector Forward = GetActorForwardVector() * GlideForwardSpeed;
+        Velocity.X = Forward.X;
+        Velocity.Y = Forward.Y;
+    }
+    Movement->Velocity = Velocity;
+
+    if (GlideTimeRemaining <= 0.f)
+    {
+        EndGlide();
+    }
+}
+
+void AFrameworkCharacter::EndGlide()
+{
+    if (bIsGliding)
+    {
+        GlideTrailEffect->Deactivate();
+        GlideTrailEffect->SetHiddenInGame(true);
+    }
+    bIsGliding = false;
+}
+
+void AFrameworkCharacter::SetGliding(bool bNewGliding)
+{
+    bWantsGlide = bNewGliding;
+    if (!bNewGliding && bIsGliding)
+    {
+        EndGlide();
+    }
+}
+
+void AFrameworkCharacter::UpdateGrappleTargeting()
+{
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    AGrappleAnchor* BestCandidate = nullptr;
+
+    if (PC && PC->PlayerCameraManager)
+    {
+        const FVector CameraLocation = PC->PlayerCameraManager->GetCameraLocation();
+        const FVector CameraForward = PC->PlayerCameraManager->GetCameraRotation().Vector();
+
+        TArray<AActor*> Anchors;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGrappleAnchor::StaticClass(), Anchors);
+
+        float BestDot = GrappleTargetingDotThreshold;
+        for (AActor* Actor : Anchors)
+        {
+            AGrappleAnchor* Anchor = Cast<AGrappleAnchor>(Actor);
+            if (!Anchor)
+            {
+                continue;
+            }
+
+            if (FVector::Dist(GetActorLocation(), Anchor->GetActorLocation()) > GrappleTargetingRadius)
+            {
+                continue;
+            }
+
+            const FVector ToAnchor = (Anchor->GetActorLocation() - CameraLocation).GetSafeNormal();
+            const float Dot = FVector::DotProduct(CameraForward, ToAnchor);
+
+            if (Dot >= BestDot)
+            {
+                BestDot = Dot;
+                BestCandidate = Anchor;
+            }
+        }
+    }
+
+    if (BestCandidate != HighlightedAnchor.Get())
+    {
+        if (HighlightedAnchor.IsValid())
+        {
+            HighlightedAnchor->OnHighlightChanged(false);
+        }
+        if (BestCandidate)
+        {
+            BestCandidate->OnHighlightChanged(true);
+        }
+        HighlightedAnchor = BestCandidate;
+    }
+
+    if (bDebugDrawGrappleTargeting && HighlightedAnchor.IsValid())
+    {
+        DrawDebugSphere(GetWorld(), HighlightedAnchor->GetActorLocation(), 40.f, 12, FColor::Green, false, 0.f);
+    }
+}
+
+void AFrameworkCharacter::RequestGrapple()
+{
+    if (bIsGrappling)
+    {
+        EndGrapple();
+        return;
+    }
+
+    if (!HighlightedAnchor.IsValid())
+    {
+        OnGrappleMiss();
+        return;
+    }
+
+    if (bIsWallSliding)
+    {
+        EndWallSlide();
+    }
+    if (bIsLedgeHanging)
+    {
+        ExitLedgeHang();
+    }
+    if (bIsGliding)
+    {
+        EndGlide();
+    }
+
+    GrappleTargetAnchor = HighlightedAnchor;
+    bIsGrappling = true;
+
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    Movement->SetMovementMode(MOVE_Flying);
+    Movement->StopMovementImmediately();
+
+    GrappleCable->SetVisibility(true);
+    GrappleBeamEffect->SetHiddenInGame(false);
+    GrappleBeamEffect->Activate(true);
+}
+
+void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
+{
+    if (!GrappleTargetAnchor.IsValid())
+    {
+        EndGrapple();
+        return;
+    }
+
+    const FVector AnchorLocation = GrappleTargetAnchor->GetActorLocation();
+    const FVector ToAnchor = AnchorLocation - GetActorLocation();
+    const FVector Direction = ToAnchor.GetSafeNormal();
+
+    SetActorLocation(GetActorLocation() + Direction * GrapplePullSpeed * DeltaTime, true);
+
+    GrappleCable->EndLocation = GrappleCable->GetComponentTransform().InverseTransformPosition(AnchorLocation);
+
+    if (ToAnchor.Size() <= GrappleReleaseDistance)
+    {
+        EndGrapple();
+    }
+}
+
+void AFrameworkCharacter::EndGrapple()
+{
+    GrappleCable->SetVisibility(false);
+    GrappleBeamEffect->Deactivate();
+    GrappleBeamEffect->SetHiddenInGame(true);
+    bIsGrappling = false;
+    GrappleTargetAnchor = nullptr;
+
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (Movement->MovementMode == MOVE_Flying)
+    {
+        Movement->SetMovementMode(MOVE_Falling);
+    }
+}
+
 void AFrameworkCharacter::SetMovementProfile(int32 ProfileIndex)
 {
     if (MovementProfiles.Num() == 0)
@@ -543,7 +788,12 @@ void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
     FString StateText;
     FColor StateColor = FColor::White;
 
-    if (bIsInPlacementMode)
+    if (bIsGrappling)
+    {
+        StateText = TEXT("Grappling");
+        StateColor = FColor::Magenta;
+    }
+    else if (bIsInPlacementMode)
     {
         StateText = TEXT("Placement Mode");
         StateColor = FColor::Cyan;
@@ -563,6 +813,11 @@ void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
         StateText = TEXT("Wall Slide");
         StateColor = FColor::Yellow;
     }
+    else if (bIsGliding)
+    {
+        StateText = FString::Printf(TEXT("Gliding (%.1fs left)"), GlideTimeRemaining);
+        StateColor = FColor::Cyan;
+    }
     else if (bDoubleJumpUsed)
     {
         StateText = TEXT("Jump 2 (Double Jump)");
@@ -580,6 +835,16 @@ void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
     }
 
     GEngine->AddOnScreenDebugMessage(7723, 0.f, StateColor, FString::Printf(TEXT("Mechanic State: %s"), *StateText));
+
+    if (!bIsGrappling && HighlightedAnchor.IsValid())
+    {
+        GEngine->AddOnScreenDebugMessage(7726, 0.f, FColor::Green,
+            FString::Printf(TEXT("Grapple Target: %s"), *HighlightedAnchor->GetName()));
+    }
+    else if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(7726, 0.f, FColor::Black, TEXT(""));
+    }
 }
 
 void AFrameworkCharacter::UpdateHealthDebugDisplay() const

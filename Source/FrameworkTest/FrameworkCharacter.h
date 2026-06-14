@@ -5,6 +5,10 @@
 #include "Blueprint/UserWidget.h"
 #include "FrameworkCharacter.generated.h"
 
+class UNiagaraComponent;
+class UCableComponent;
+class AGrappleAnchor;
+
 USTRUCT(BlueprintType)
 struct FCharacterMovementProfile
 {
@@ -91,6 +95,10 @@ struct FCharacterMovementProfile
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bEnablePlacementMode = true;
+
+    // --- Glide ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnableGlide = true;
 };
 
 UCLASS(Blueprintable)
@@ -175,6 +183,75 @@ public:
     // Draw debug lines for ledge traces
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Ledge Hang")
     bool bDebugDrawLedgeTraces = false;
+
+    // --- Glide ---
+    // Call from Blueprint's jump input action "Ongoing"/"Triggered" (true) and
+    // "Completed"/"Canceled" (false) events. Glide only engages while falling.
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    void SetGliding(bool bNewGliding);
+
+    // Max downward fall speed while gliding (cm/s)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
+    float GlideMaxFallSpeed = 250.f;
+
+    // How quickly Velocity.Z eases toward -GlideMaxFallSpeed (higher = snappier)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.1"))
+    float GlideZInterpSpeed = 4.f;
+
+    // Optional forward boost while gliding (cm/s added along forward vector)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
+    float GlideForwardSpeed = 0.f;
+
+    // Max continuous glide duration in seconds before it forces an end (placeholder for stamina)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
+    float GlideMaxDuration = 3.f;
+
+    // Seconds-per-second the glide duration recharges while not gliding (placeholder for stamina regen)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
+    float GlideRechargeRate = 1.f;
+
+    // Remaining glide time (placeholder for a future stamina gauge)
+    UPROPERTY(BlueprintReadOnly, Category = "Movement Tuning|Glide")
+    float GlideTimeRemaining = 0.f;
+
+    // Niagara trail spawned/activated while gliding. Assign in Blueprint.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UNiagaraComponent* GlideTrailEffect;
+
+    // --- Grapple ---
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UCableComponent* GrappleCable;
+
+    // Niagara beam effect rendered along the cable while grappling. Assign in Blueprint.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UNiagaraComponent* GrappleBeamEffect;
+
+    // Radius around the character within which AGrappleAnchor actors can be targeted
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
+    float GrappleTargetingRadius = 2000.f;
+
+    // How closely the camera must point at an anchor to highlight it (dot product threshold)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float GrappleTargetingDotThreshold = 0.95f;
+
+    // Speed the character is pulled toward the anchor (cm/s)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
+    float GrapplePullSpeed = 2000.f;
+
+    // Distance from anchor at which the grapple auto-releases
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
+    float GrappleReleaseDistance = 100.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple")
+    bool bDebugDrawGrappleTargeting = false;
+
+    // Call from Blueprint's IA_Grapple "Started" event
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    void RequestGrapple();
+
+    // Blueprint hook - fired when RequestGrapple() is pressed with no anchor currently highlighted
+    UFUNCTION(BlueprintImplementableEvent, Category = "Movement")
+    void OnGrappleMiss();
 
     // --- Mechanic State Debug Display ---
     // Show an on-screen text indicator for the player's current mechanic/state
@@ -285,4 +362,18 @@ private:
     void UpdateLedgeHang(float DeltaTime);
     void EnterLedgeHang(const FHitResult& WallHit, const FVector& SurfacePoint);
     void ExitLedgeHang();
+
+    // --- Glide state ---
+    bool bWantsGlide = false;
+    bool bIsGliding = false;
+    void UpdateGlide(float DeltaTime);
+    void EndGlide();
+
+    // --- Grapple state ---
+    bool bIsGrappling = false;
+    TWeakObjectPtr<AGrappleAnchor> HighlightedAnchor;
+    TWeakObjectPtr<AGrappleAnchor> GrappleTargetAnchor;
+    void UpdateGrappleTargeting();
+    void UpdateGrapple(float DeltaTime);
+    void EndGrapple();
 };

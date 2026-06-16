@@ -6,6 +6,7 @@
 #include "NiagaraComponent.h"
 #include "CableComponent.h"
 #include "GrappleAnchor.h"
+#include "WallSlideSurfaceComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 
@@ -313,8 +314,24 @@ void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
         return;
     }
 
+    const UWallSlideSurfaceComponent* SurfaceComp = WallHit.GetActor() ? WallHit.GetActor()->FindComponentByClass<UWallSlideSurfaceComponent>() : nullptr;
+
+    // Curved/non-slideable surface -> reject
+    if (SurfaceComp && !SurfaceComp->bAllowWallSlide)
+    {
+        if (bIsWallSliding)
+        {
+            EndWallSlide();
+        }
+        return;
+    }
+
+    const float ApproachThreshold = (SurfaceComp && SurfaceComp->ApproachDotThresholdOverride >= 0.f)
+        ? SurfaceComp->ApproachDotThresholdOverride
+        : Profile.WallApproachDotThreshold;
+
     const float ApproachDot = FVector::DotProduct(GetActorForwardVector(), -WallHit.Normal);
-    if (ApproachDot < Profile.WallApproachDotThreshold)
+    if (ApproachDot < ApproachThreshold)
     {
         if (bIsWallSliding)
         {
@@ -337,8 +354,10 @@ void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
     bIsWallSliding = true;
     WallSlideNormal = WallHit.Normal;
 
+    const float EffectiveSlideSpeed = Profile.WallSlideSpeed * (SurfaceComp ? SurfaceComp->SlideSpeedMultiplier : 1.f);
+
     FVector Velocity = Movement->Velocity;
-    Velocity.Z = FMath::Max(Velocity.Z, -Profile.WallSlideSpeed);
+    Velocity.Z = FMath::Max(Velocity.Z, -EffectiveSlideSpeed);
     Movement->Velocity = Velocity;
 }
 

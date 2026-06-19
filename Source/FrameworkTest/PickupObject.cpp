@@ -45,6 +45,8 @@ APickupObject::APickupObject()
     StackDetection->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 }
 
+// Called when the game starts or when spawned
+// Sets up pickup object components and physics
 void APickupObject::BeginPlay()
 {
     Super::BeginPlay();
@@ -56,6 +58,7 @@ void APickupObject::BeginPlay()
         StackDetection->SetSphereRadius(Mesh->Bounds.SphereRadius * 1.1f);
 }
 
+// Toggles carrying state of the pickup object
 void APickupObject::ToggleCarry()
 {
     if (PickupState == EPickupState::Placing) return;
@@ -77,6 +80,7 @@ void APickupObject::ToggleCarry()
     }
 }
 
+// Checks if player is standing on top of the pickup object
 bool APickupObject::IsPlayerStandingOnTop(ACharacter* Player) const
 {
     UCapsuleComponent* Capsule = Player->GetCapsuleComponent();
@@ -97,6 +101,7 @@ bool APickupObject::IsPlayerStandingOnTop(ACharacter* Player) const
     return bHorizontalOverlap && PlayerBottomZ >= BlockTopZ - StandingOnTopTolerance;
 }
 
+// Picks up the object by the specified character
 void APickupObject::PickUp(ACharacter* InCarrier)
 {
     Carrier = InCarrier;
@@ -139,6 +144,7 @@ void APickupObject::PickUp(ACharacter* InCarrier)
     OnPickedUp();
 }
 
+// Begins the drop process for the pickup object
 void APickupObject::BeginDrop()
 {
     bIsCarried = false;

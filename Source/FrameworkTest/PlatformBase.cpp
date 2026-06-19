@@ -3,6 +3,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Curves/CurveFloat.h"
 
+// Constructor for APlatformBase class
+// Initializes the platform actor with default settings and components
 APlatformBase::APlatformBase()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -12,6 +14,8 @@ APlatformBase::APlatformBase()
     RootComponent = PlatformMesh;
 }
 
+// Called when the game starts or when spawned
+// Sets up initial platform positions based on travel distances
 void APlatformBase::BeginPlay()
 {
     Super::BeginPlay();
@@ -19,6 +23,8 @@ void APlatformBase::BeginPlay()
     EndLoc = StartLoc + FVector(XTravelDistance, YTravelDistance, ZTravelDistance);
 }
 
+// Activates the platform to move to its end position
+// Handles delay before movement if configured
 void APlatformBase::Activate()
 {
     if (PlatformState == EPlatformState::Idle_End) return;
@@ -36,6 +42,8 @@ void APlatformBase::Activate()
     SetActorTickEnabled(true);
 }
 
+// Deactivates the platform to return to its start position
+// Handles delay before movement if configured
 void APlatformBase::Deactivate()
 {
     if (PlatformState == EPlatformState::Idle_Start) return;
@@ -53,6 +61,8 @@ void APlatformBase::Deactivate()
     SetActorTickEnabled(true);
 }
 
+// Called every frame
+// Handles platform movement logic including delay phases and actual movement
 void APlatformBase::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);

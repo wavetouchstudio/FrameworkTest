@@ -52,20 +52,26 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Platform")
     EPlatformState PlatformState = EPlatformState::Idle_Start;
 
+    /** Activates the platform to move to its end position */
     UFUNCTION(BlueprintCallable, Category = "Platform")
     void Activate();
 
+    /** Deactivates the platform to return to its start position */
     UFUNCTION(BlueprintCallable, Category = "Platform")
     void Deactivate();
 
+    /** Blueprint-implementable event called when platform reaches end position */
     UFUNCTION(BlueprintImplementableEvent, Category = "Platform")
     void OnActivated();
 
+    /** Blueprint-implementable event called when platform returns to start position */
     UFUNCTION(BlueprintImplementableEvent, Category = "Platform")
     void OnDeactivated();
 
 protected:
+    /** Called when the game starts or when spawned */
     virtual void BeginPlay() override;
+    /** Called every frame to handle platform movement */
     virtual void Tick(float DeltaTime) override;
 
 private:

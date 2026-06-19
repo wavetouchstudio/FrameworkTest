@@ -9,6 +9,8 @@
 #include "DoorSliding.h"
 #include "Drawbridge.h"
 
+// Constructor for ALever class
+// Initializes lever with scene components and audio
 ALever::ALever()
 {
     PrimaryActorTick.bCanEverTick = false;
@@ -27,12 +29,16 @@ ALever::ALever()
     Audio->bAutoActivate = false;
 }
 
+// Called when the game starts or when spawned
+// Sets up initial lever state
 void ALever::BeginPlay()
 {
     Super::BeginPlay();
     bIsLocked = bStartLocked;
 }
 
+// Activates the lever if not locked
+// Triggers connected mechanisms like lifts, doors, etc.
 void ALever::ActivateLever()
 {
     if (bIsLocked || bHasBeenActivated) return;

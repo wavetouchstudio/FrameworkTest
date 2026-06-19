@@ -2,6 +2,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 
+// Constructor for ADrawbridge class
+// Initializes drawbridge with pivot, arm, and bridge mesh components
 ADrawbridge::ADrawbridge()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -16,6 +18,8 @@ ADrawbridge::ADrawbridge()
     BridgeMesh->SetupAttachment(Arm);
 }
 
+// Called when the game starts or when spawned
+// Sets up initial drawbridge rotation
 void ADrawbridge::BeginPlay()
 {
     Super::BeginPlay();
@@ -30,6 +34,8 @@ void ADrawbridge::BeginPlay()
     Arm->SetRelativeRotation(StartRot);
 }
 
+// Called every frame
+// Handles drawbridge opening/closing animation
 void ADrawbridge::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -40,6 +46,7 @@ void ADrawbridge::Tick(float DeltaTime)
     Arm->SetRelativeRotation(NewRot);
 }
 
+// Opens the drawbridge
 void ADrawbridge::Open()
 {
     if (bIsOpen) return;
@@ -48,6 +55,7 @@ void ADrawbridge::Open()
     OnOpened();
 }
 
+// Closes the drawbridge
 void ADrawbridge::Close()
 {
     if (!bIsOpen) return;

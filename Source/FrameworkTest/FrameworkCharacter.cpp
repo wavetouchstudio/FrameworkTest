@@ -10,6 +10,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 
+// Constructor for AFrameworkCharacter class
+// Initializes character with movement profiles and default settings
 AFrameworkCharacter::AFrameworkCharacter()
 {
     // 2, not 1: engine's CanJumpInternal() blocks Jump() while falling with
@@ -70,6 +72,8 @@ AFrameworkCharacter::AFrameworkCharacter()
     GrappleBeamEffect->bAutoActivate = false;
 }
 
+// Called when the game starts or when spawned
+// Sets up character components and input bindings
 void AFrameworkCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -92,6 +96,8 @@ void AFrameworkCharacter::BeginPlay()
     }
 }
 
+// Called every frame
+// Handles character movement and mechanics updates
 void AFrameworkCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -149,6 +155,8 @@ void AFrameworkCharacter::Tick(float DeltaTime)
     UpdateMechanicDebugDisplay();
 }
 
+// Handles jump request from player input
+// Manages jump logic including double jumps
 void AFrameworkCharacter::RequestJump()
 {
     UCharacterMovementComponent* Movement = GetCharacterMovement();

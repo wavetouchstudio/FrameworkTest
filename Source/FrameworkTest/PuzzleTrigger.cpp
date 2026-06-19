@@ -18,6 +18,8 @@ APuzzleTrigger::APuzzleTrigger()
     TriggerBox->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 }
 
+// Called when the game starts or when spawned
+// Sets up puzzle trigger components
 void APuzzleTrigger::BeginPlay()
 {
     Super::BeginPlay();
@@ -33,6 +35,7 @@ void APuzzleTrigger::BeginPlay()
     }
 }
 
+// Activates the puzzle trigger via lever
 void APuzzleTrigger::ActivateByLever()
 {
     if (bIsActive || !IsValid(PuzzleManager)) return;
@@ -48,6 +51,7 @@ void APuzzleTrigger::ActivateByLever()
     }
 }
 
+// Deactivates the puzzle trigger via lever
 void APuzzleTrigger::DeactivateByLever()
 {
     if (!bIsActive || !IsValid(PuzzleManager)) return;

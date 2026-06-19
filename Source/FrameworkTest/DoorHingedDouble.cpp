@@ -5,6 +5,8 @@
 #include "GameFramework/Pawn.h"
 #include "Curves/CurveFloat.h"
 
+// Constructor for ADoorHingedDouble class
+// Initializes double hinged door with root, frame, pivots, and door meshes
 ADoorHingedDouble::ADoorHingedDouble()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -28,6 +30,8 @@ ADoorHingedDouble::ADoorHingedDouble()
     DoorMeshB->SetupAttachment(HingePivotB);
 }
 
+// Called when the game starts or when spawned
+// Sets up initial door rotation and state
 void ADoorHingedDouble::BeginPlay()
 {
     Super::BeginPlay();
@@ -42,6 +46,8 @@ void ADoorHingedDouble::BeginPlay()
     ApplyMeshRotation();
 }
 
+// Called every frame
+// Handles door opening/closing animation
 void ADoorHingedDouble::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -55,6 +61,7 @@ void ADoorHingedDouble::Tick(float DeltaTime)
     }
 }
 
+// Applies current rotation to both door meshes
 void ADoorHingedDouble::ApplyMeshRotation()
 {
     FRotator NewRotA = ClosedRotA;
@@ -75,12 +82,14 @@ void ADoorHingedDouble::ApplyMeshRotation()
     HingePivotB->SetRelativeRotation(NewRotB);
 }
 
+// Toggles door between open and closed states
 void ADoorHingedDouble::ToggleDoor()
 {
     if (bIsLocked) return;
     bIsOpen ? CloseDoor() : OpenDoor();
 }
 
+// Opens the door with animation
 void ADoorHingedDouble::OpenDoor()
 {
     if (bIsLocked || bIsOpen) return;
@@ -112,6 +121,7 @@ void ADoorHingedDouble::OpenDoor()
     OnOpened();
 }
 
+// Closes the door with animation
 void ADoorHingedDouble::CloseDoor()
 {
     if (!bIsOpen) return;
@@ -122,12 +132,14 @@ void ADoorHingedDouble::CloseDoor()
     OnClosed();
 }
 
+// Locks the door to prevent opening
 void ADoorHingedDouble::LockDoor()
 {
     bIsLocked = true;
     OnLocked();
 }
 
+// Unlocks the door to allow opening
 void ADoorHingedDouble::UnlockDoor()
 {
     bIsLocked = false;

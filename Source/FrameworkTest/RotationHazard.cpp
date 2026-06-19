@@ -5,6 +5,8 @@
 #include "FrameworkCharacter.h"
 #include "PickupObject.h"
 
+// Constructor for ARotationHazard class
+// Initializes rotating hazard with mesh component
 ARotationHazard::ARotationHazard()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -16,6 +18,8 @@ ARotationHazard::ARotationHazard()
     HazardMesh->OnComponentBeginOverlap.AddDynamic(this, &ARotationHazard::OnMeshOverlap);
 }
 
+// Called every frame
+// Handles hazard rotation based on configured axis and speed
 void ARotationHazard::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -31,6 +35,8 @@ void ARotationHazard::Tick(float DeltaTime)
     HazardMesh->AddLocalRotation(FQuat(Axis, FMath::DegreesToRadians(RotationSpeed * DeltaTime)));
 }
 
+// Called when hazard mesh overlaps with another actor
+// Handles damage to characters and objects
 void ARotationHazard::OnMeshOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
     int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {

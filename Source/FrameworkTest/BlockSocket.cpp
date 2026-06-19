@@ -26,6 +26,8 @@ ABlockSocket::ABlockSocket()
     DetectionSphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 }
 
+// Called when the game starts or when spawned
+// Sets up block socket components
 void ABlockSocket::BeginPlay()
 {
     Super::BeginPlay();
@@ -33,6 +35,8 @@ void ABlockSocket::BeginPlay()
     DetectionSphere->OnComponentEndOverlap.AddDynamic(this, &ABlockSocket::OnSphereEndOverlap);
 }
 
+// Called every frame
+// Handles block snapping animation
 void ABlockSocket::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -83,6 +87,7 @@ void ABlockSocket::Tick(float DeltaTime)
     }
 }
 
+// Initiates snapping process for a block
 void ABlockSocket::InitiateSnap(APickupObject* Block)
 {
     if (!IsValid(Block) || bOccupied || bSnapping) return;
@@ -101,6 +106,7 @@ void ABlockSocket::InitiateSnap(APickupObject* Block)
     OccupiedBy->Mesh->SetEnableGravity(false);
 }
 
+// Releases the currently snapped block
 void ABlockSocket::ReleaseBlock()
 {
     bOccupied = false;

@@ -18,6 +18,8 @@ ADoorDestructible::ADoorDestructible()
     DoorMesh->SetupAttachment(Root);
 }
 
+// Called when the game starts or when spawned
+// Sets up destructible door components
 void ADoorDestructible::BeginPlay()
 {
     Super::BeginPlay();
@@ -25,6 +27,7 @@ void ADoorDestructible::BeginPlay()
     bIsLocked = bStartLocked;
 }
 
+// Applies damage to the destructible door
 void ADoorDestructible::ApplyDamage(float Amount)
 {
     if (bIsDestroyed) return;
@@ -42,6 +45,7 @@ void ADoorDestructible::ApplyDamage(float Amount)
     }
 }
 
+// Spawns debris when door is destroyed
 void ADoorDestructible::SpawnDebris()
 {
     if (!DebrisClass || DebrisCount <= 0) return;

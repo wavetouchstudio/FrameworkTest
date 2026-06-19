@@ -4,6 +4,8 @@
 
 #include "Components/SceneComponent.h"
 
+// Constructor for APuzzleManager class
+// Initializes puzzle manager with scene component root
 APuzzleManager::APuzzleManager()
 {
     PrimaryActorTick.bCanEverTick = false;
@@ -12,6 +14,8 @@ APuzzleManager::APuzzleManager()
     RootComponent = Root;
 }
 
+// Called when a puzzle trigger is activated
+// Checks if all triggers are active to solve the puzzle
 void APuzzleManager::TriggerActivated(APuzzleTrigger* CallingTrigger)
 {
     if (!RegisteredTriggers.Contains(CallingTrigger)) return;
@@ -28,6 +32,8 @@ void APuzzleManager::TriggerActivated(APuzzleTrigger* CallingTrigger)
     }
 }
 
+// Called when a puzzle trigger is deactivated
+// Checks if puzzle should be reset when triggers are deactivated
 void APuzzleManager::TriggerDeactivated(APuzzleTrigger* CallingTrigger)
 {
     if (!RegisteredTriggers.Contains(CallingTrigger)) return;

@@ -5,6 +5,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 
+// Constructor for ADoorHinged class
+// Initializes hinged door with pivot, frame, arm, mesh, and constraint components
 ADoorHinged::ADoorHinged()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -25,6 +27,8 @@ ADoorHinged::ADoorHinged()
     HingeConstraint->SetupAttachment(HingePivot);
 }
 
+// Called when the game starts or when spawned
+// Sets up initial door state and physics
 void ADoorHinged::BeginPlay()
 {
     Super::BeginPlay();
@@ -44,6 +48,8 @@ void ADoorHinged::BeginPlay()
     ApplyMeshRotation();
 }
 
+// Called every frame
+// Handles door opening/closing animation
 void ADoorHinged::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -51,6 +57,7 @@ void ADoorHinged::Tick(float DeltaTime)
     ApplyMeshRotation();
 }
 
+// Applies current rotation to the door mesh
 void ADoorHinged::ApplyMeshRotation()
 {
     FRotator NewRot = ClosedRot;
@@ -59,6 +66,7 @@ void ADoorHinged::ApplyMeshRotation()
     HingeArm->SetRelativeRotation(NewRot);
 }
 
+// Sets up physics-based free swinging door
 void ADoorHinged::SetupFreeSwing()
 {
     SetActorTickEnabled(false);
@@ -85,12 +93,14 @@ void ADoorHinged::SetupFreeSwing()
     HingeConstraint->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
 }
 
+// Toggles door between open and closed states
 void ADoorHinged::ToggleDoor()
 {
     if (bIsLocked || bFreeSwing) return;
     bIsOpen ? CloseDoor() : OpenDoor();
 }
 
+// Opens the door with animation
 void ADoorHinged::OpenDoor()
 {
     if (bIsLocked || bIsOpen || bFreeSwing) return;
@@ -120,6 +130,7 @@ void ADoorHinged::OpenDoor()
     OnOpened();
 }
 
+// Closes the door with animation
 void ADoorHinged::CloseDoor()
 {
     if (!bIsOpen || bFreeSwing) return;
@@ -128,12 +139,14 @@ void ADoorHinged::CloseDoor()
     OnClosed();
 }
 
+// Locks the door to prevent opening
 void ADoorHinged::LockDoor()
 {
     bIsLocked = true;
     OnLocked();
 }
 
+// Unlocks the door to allow opening
 void ADoorHinged::UnlockDoor()
 {
     bIsLocked = false;

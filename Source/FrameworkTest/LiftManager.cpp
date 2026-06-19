@@ -7,6 +7,8 @@
 #include "Curves/CurveFloat.h"
 #include "GameFramework/Character.h"
 
+// Constructor for ALiftManager class
+// Initializes lift with platform, button, trigger, and marker components
 ALiftManager::ALiftManager()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -27,6 +29,8 @@ ALiftManager::ALiftManager()
     BottomMarker->SetupAttachment(RootComponent);
 }
 
+// Called when the game starts or when spawned
+// Calculates lift boundaries and sets up button overlap events
 void ALiftManager::BeginPlay()
 {
     Super::BeginPlay();

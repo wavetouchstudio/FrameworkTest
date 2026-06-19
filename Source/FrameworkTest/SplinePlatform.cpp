@@ -3,6 +3,8 @@
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 
+// Constructor for ASplinePlatform class
+// Initializes spline platform with scene components
 ASplinePlatform::ASplinePlatform()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -18,6 +20,8 @@ ASplinePlatform::ASplinePlatform()
     PlatformMesh->SetMobility(EComponentMobility::Movable);
 }
 
+// Called every frame
+// Handles spline platform movement along the spline path
 void ASplinePlatform::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);

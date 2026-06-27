@@ -99,6 +99,63 @@ struct FCharacterMovementProfile
     // --- Glide ---
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bEnableGlide = true;
+
+    // Max downward fall speed while gliding (cm/s)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float GlideMaxFallSpeed = 75.f;
+
+    // How quickly Velocity.Z eases toward -GlideMaxFallSpeed (higher = snappier)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.1"))
+    float GlideZInterpSpeed = 8.f;
+
+    // Optional forward boost while gliding (cm/s added along forward vector). Rank up via skills for more.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float GlideForwardSpeed = 800.f;
+
+    // Max continuous glide duration in seconds before it forces an end (placeholder for stamina)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float GlideMaxDuration = 3.f;
+
+    // Seconds-per-second the glide duration recharges while not gliding (placeholder for stamina regen)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float GlideRechargeRate = 1.f;
+
+    // Seconds the jump input must be held before glide actually engages
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float GlideHoldThreshold = 0.25f;
+
+    // One-time impulse magnitude added to velocity the instant glide engages (the "wind catches you" kick)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float GlideLaunchSpeed = 300.f;
+
+    // Launch angle measured from horizontal (0 = straight forward, 90 = straight up). Keep positive for lift, not a dive.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0", ClampMax = "90.0"))
+    float GlideLaunchAngle = 35.f;
+
+    // --- Wall Trace ---
+    // Trace channel used to detect walls
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    TEnumAsByte<ECollisionChannel> WallTraceChannel = ECC_Visibility;
+
+    // Forward distance to check for a wall
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float WallTraceDistance = 60.f;
+
+    // --- Camera ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float CameraArmLength = 300.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FVector CameraSocketOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "5.0", ClampMax = "170.0"))
+    float CameraFOV = 90.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bEnableCameraLag = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+    float CameraLagSpeed = 10.f;
 };
 
 UCLASS(Blueprintable)
@@ -125,15 +182,6 @@ public:
     // Grace period after walking off a ledge where a jump still counts as a ground jump
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Double Jump", meta = (ClampMin = "0.0"))
     float CoyoteTime = 0.15f;
-
-    // --- Wall Slide ---
-    // Trace channel used to detect walls
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Slide")
-    TEnumAsByte<ECollisionChannel> WallTraceChannel = ECC_Visibility;
-
-    // Forward distance to check for a wall
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Wall Slide", meta = (ClampMin = "0.0"))
-    float WallTraceDistance = 60.f;
 
     // --- Ledge Hang ---
     // Height above the capsule's feet where the hand/wall trace is performed
@@ -189,26 +237,6 @@ public:
     // "Completed"/"Canceled" (false) events. Glide only engages while falling.
     UFUNCTION(BlueprintCallable, Category = "Movement")
     void SetGliding(bool bNewGliding);
-
-    // Max downward fall speed while gliding (cm/s)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
-    float GlideMaxFallSpeed = 250.f;
-
-    // How quickly Velocity.Z eases toward -GlideMaxFallSpeed (higher = snappier)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.1"))
-    float GlideZInterpSpeed = 4.f;
-
-    // Optional forward boost while gliding (cm/s added along forward vector)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
-    float GlideForwardSpeed = 0.f;
-
-    // Max continuous glide duration in seconds before it forces an end (placeholder for stamina)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
-    float GlideMaxDuration = 3.f;
-
-    // Seconds-per-second the glide duration recharges while not gliding (placeholder for stamina regen)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Glide", meta = (ClampMin = "0.0"))
-    float GlideRechargeRate = 1.f;
 
     // Remaining glide time (placeholder for a future stamina gauge)
     UPROPERTY(BlueprintReadOnly, Category = "Movement Tuning|Glide")
@@ -321,6 +349,28 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "UI")
     UUserWidget* InteractPromptWidget = nullptr;
 
+    // Overlap search radius for nearby interactables
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact", meta = (ClampMin = "0.0"))
+    float InteractSphereRadius = 200.f;
+
+    // Final reachability cutoff after the line trace
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact", meta = (ClampMin = "0.0"))
+    float MaxInteractDistance = 150.f;
+
+    // Trace channel used to confirm unobstructed line of sight to a candidate
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact")
+    TEnumAsByte<ECollisionChannel> InteractTraceChannel = ECC_Visibility;
+
+    // Assign BPI_Interactable here in the character BP defaults
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact")
+    TSubclassOf<UInterface> InteractableInterfaceClass;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interact")
+    bool bCanInteract = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interact")
+    AActor* CurrentInteractable = nullptr;
+
 protected:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
@@ -365,6 +415,8 @@ private:
 
     // --- Glide state ---
     bool bWantsGlide = false;
+    bool bJumpInputHeld = false;
+    float JumpHeldStartTime = -1.f;
     bool bIsGliding = false;
     void UpdateGlide(float DeltaTime);
     void EndGlide();
@@ -376,4 +428,6 @@ private:
     void UpdateGrappleTargeting();
     void UpdateGrapple(float DeltaTime);
     void EndGrapple();
+
+    void UpdateInteractDetection();
 };

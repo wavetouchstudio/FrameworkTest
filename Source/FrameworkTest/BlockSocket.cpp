@@ -2,6 +2,7 @@
 #include "PickupObject.h"
 #include "DoorHinged.h"
 #include "DoorSliding.h"
+#include "DoorDestructible.h"
 #include "Drawbridge.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
@@ -66,9 +67,10 @@ void ABlockSocket::Tick(float DeltaTime)
             OnBlockPlaced();
             if (IsValid(LinkedDoor))
             {
-                if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->OpenDoor(); }
-                else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor)) { DS->OpenDoor(); }
-                else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))   { DB->Open(); }
+                if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))               { DH->OpenDoor(); }
+                else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))       { DS->OpenDoor(); }
+                else if (ADoorDestructible* DD = Cast<ADoorDestructible>(LinkedDoor)) { DD->UnlockDoor(); }
+                else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))         { DB->Open(); }
             }
         }
     }
@@ -115,9 +117,10 @@ void ABlockSocket::ReleaseBlock()
     OnBlockRemoved();
     if (IsValid(LinkedDoor))
     {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->CloseDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->CloseDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Close(); }
+        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))               { DH->CloseDoor(); }
+        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))       { DS->CloseDoor(); }
+        else if (ADoorDestructible* DD = Cast<ADoorDestructible>(LinkedDoor)) { DD->LockDoor(); }
+        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))         { DB->Close(); }
     }
 }
 

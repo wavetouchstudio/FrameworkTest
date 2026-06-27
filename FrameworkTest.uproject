@@ -70,6 +70,20 @@
 		{
 			"Name": "CableComponent",
 			"Enabled": true
+		},
+		{
+			"Name": "Able",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/567d7a4af24a4c0eaab75961e0686feb"
+		},
+		{
+			"Name": "BlendImporter",
+			"Enabled": true
+		},
+		{
+			"Name": "SnappingHelper",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/1e0699cf59d64105957b4aa40f367252"
 		}
 	]
 }

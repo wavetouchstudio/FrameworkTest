@@ -1,6 +1,7 @@
 #include "RotationHazard.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 #include "FrameworkCharacter.h"
 #include "PickupObject.h"

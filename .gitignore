@@ -85,3 +85,6 @@ FridayWorkspace/
 # IDE workspace files
 *.code-workspace
 .vsconfig
+AdaptiveCamera.png
+EPMasterMaterials.png
+*.fbx

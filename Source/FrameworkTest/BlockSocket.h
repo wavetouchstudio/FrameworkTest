@@ -10,6 +10,7 @@ class USphereComponent;
 class APickupObject;
 class ADoorHinged;
 class ADoorSliding;
+class ADoorDestructible;
 class ADrawbridge;
 
 UCLASS(Blueprintable, meta=(PrioritizeCategories="Socket"))

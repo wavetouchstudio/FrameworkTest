@@ -7,6 +7,8 @@
 #include "CableComponent.h"
 #include "GrappleAnchor.h"
 #include "WallSlideSurfaceComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 
@@ -79,7 +81,7 @@ void AFrameworkCharacter::BeginPlay()
     Super::BeginPlay();
 
     CurrentHealth = MaxHealth;
-    GlideTimeRemaining = GlideMaxDuration;
+    GlideTimeRemaining = MovementProfiles[CurrentProfileIndex].GlideMaxDuration;
     UpdateHealthDebugDisplay();
     SetMovementProfile(CurrentProfileIndex);
 
@@ -91,6 +93,7 @@ void AFrameworkCharacter::BeginPlay()
             if (InteractPromptWidget)
             {
                 InteractPromptWidget->AddToViewport();
+                InteractPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
             }
         }
     }
@@ -148,10 +151,12 @@ void AFrameworkCharacter::Tick(float DeltaTime)
 
     if (!bIsGliding)
     {
-        GlideTimeRemaining = FMath::Min(GlideMaxDuration, GlideTimeRemaining + GlideRechargeRate * DeltaTime);
+        const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+        GlideTimeRemaining = FMath::Min(Profile.GlideMaxDuration, GlideTimeRemaining + Profile.GlideRechargeRate * DeltaTime);
     }
 
     UpdateGrappleTargeting();
+    UpdateInteractDetection();
     UpdateMechanicDebugDisplay();
 }
 
@@ -171,7 +176,7 @@ void AFrameworkCharacter::RequestJump()
         FCollisionQueryParams Params(SCENE_QUERY_STAT(LedgeClimb), false, this);
         const bool bBlocked = Capsule != nullptr
             && GetWorld()->SweepSingleByChannel(ClimbHit, GetActorLocation(), ClimbTarget, GetActorQuat(),
-                WallTraceChannel, Capsule->GetCollisionShape(), Params);
+                MovementProfiles[CurrentProfileIndex].WallTraceChannel, Capsule->GetCollisionShape(), Params);
 
         ExitLedgeHang();
 
@@ -280,11 +285,12 @@ void AFrameworkCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, 
 
 void AFrameworkCharacter::TraceForWall(FHitResult& OutHit) const
 {
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
     const FVector Start = GetActorLocation();
-    const FVector End = Start + GetActorForwardVector() * WallTraceDistance;
+    const FVector End = Start + GetActorForwardVector() * Profile.WallTraceDistance;
 
     FCollisionQueryParams Params(SCENE_QUERY_STAT(WallTrace), false, this);
-    GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, WallTraceChannel, Params);
+    GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, Profile.WallTraceChannel, Params);
 }
 
 void AFrameworkCharacter::UpdateWallSlide(float DeltaTime)
@@ -384,6 +390,7 @@ bool AFrameworkCharacter::TraceForLedge(FHitResult& OutWallHit, FVector& OutLedg
         return false;
     }
 
+    const ECollisionChannel LedgeTraceChannel = MovementProfiles[CurrentProfileIndex].WallTraceChannel;
     const FVector ActorLocation = GetActorLocation();
     const float CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
     const float FeetZ = ActorLocation.Z - CapsuleHalfHeight;
@@ -396,7 +403,7 @@ bool AFrameworkCharacter::TraceForLedge(FHitResult& OutWallHit, FVector& OutLedg
     // 1. Hand-height wall trace
     const FVector WallEnd = HandOrigin + Forward * LedgeWallTraceDistance;
     FHitResult WallHit;
-    const bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, HandOrigin, WallEnd, WallTraceChannel, Params);
+    const bool bHitWall = GetWorld()->LineTraceSingleByChannel(WallHit, HandOrigin, WallEnd, LedgeTraceChannel, Params);
 
     if (bDebugDrawLedgeTraces)
     {
@@ -412,7 +419,7 @@ bool AFrameworkCharacter::TraceForLedge(FHitResult& OutWallHit, FVector& OutLedg
     const FVector ClearanceOrigin = HandOrigin + FVector(0.f, 0.f, LedgeClearanceHeight);
     const FVector ClearanceEnd = ClearanceOrigin + Forward * LedgeWallTraceDistance;
     FHitResult ClearanceHit;
-    const bool bClearanceBlocked = GetWorld()->LineTraceSingleByChannel(ClearanceHit, ClearanceOrigin, ClearanceEnd, WallTraceChannel, Params);
+    const bool bClearanceBlocked = GetWorld()->LineTraceSingleByChannel(ClearanceHit, ClearanceOrigin, ClearanceEnd, LedgeTraceChannel, Params);
 
     if (bDebugDrawLedgeTraces)
     {
@@ -430,7 +437,7 @@ bool AFrameworkCharacter::TraceForLedge(FHitResult& OutWallHit, FVector& OutLedg
     const FVector SurfaceTraceEnd = FVector(ForwardReachPoint.X, ForwardReachPoint.Y, HandOrigin.Z - LedgeClearanceHeight);
 
     FHitResult SurfaceHit;
-    const bool bHitSurface = GetWorld()->LineTraceSingleByChannel(SurfaceHit, SurfaceTraceStart, SurfaceTraceEnd, WallTraceChannel, Params);
+    const bool bHitSurface = GetWorld()->LineTraceSingleByChannel(SurfaceHit, SurfaceTraceStart, SurfaceTraceEnd, LedgeTraceChannel, Params);
 
     if (bDebugDrawLedgeTraces)
     {
@@ -517,6 +524,11 @@ void AFrameworkCharacter::UpdateGlide(float DeltaTime)
     UCharacterMovementComponent* Movement = GetCharacterMovement();
     const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
 
+    if (bJumpInputHeld && !bWantsGlide && (GetWorld()->GetTimeSeconds() - JumpHeldStartTime) >= Profile.GlideHoldThreshold)
+    {
+        bWantsGlide = true;
+    }
+
     if (!bWantsGlide || !Profile.bEnableGlide || GlideTimeRemaining <= 0.f || bIsWallSliding)
     {
         if (bIsGliding)
@@ -531,18 +543,24 @@ void AFrameworkCharacter::UpdateGlide(float DeltaTime)
         bIsGliding = true;
         GlideTrailEffect->SetHiddenInGame(false);
         GlideTrailEffect->Activate(true);
+
+        // Wind-catch kick: lift impulse added to current fall velocity, not a downward dive
+        const float LaunchAngleRad = FMath::DegreesToRadians(Profile.GlideLaunchAngle);
+        const FVector Forward = GetActorForwardVector();
+        const FVector LaunchImpulse = Forward * (Profile.GlideLaunchSpeed * FMath::Cos(LaunchAngleRad)) + FVector(0.f, 0.f, Profile.GlideLaunchSpeed * FMath::Sin(LaunchAngleRad));
+        Movement->Velocity += LaunchImpulse;
     }
 
     GlideTimeRemaining = FMath::Max(0.f, GlideTimeRemaining - DeltaTime);
 
     FVector Velocity = Movement->Velocity;
-    if (Velocity.Z < -GlideMaxFallSpeed)
+    if (Velocity.Z < -Profile.GlideMaxFallSpeed)
     {
-        Velocity.Z = FMath::FInterpTo(Velocity.Z, -GlideMaxFallSpeed, DeltaTime, GlideZInterpSpeed);
+        Velocity.Z = FMath::FInterpTo(Velocity.Z, -Profile.GlideMaxFallSpeed, DeltaTime, Profile.GlideZInterpSpeed);
     }
-    if (GlideForwardSpeed > 0.f)
+    if (Profile.GlideForwardSpeed > 0.f)
     {
-        const FVector Forward = GetActorForwardVector() * GlideForwardSpeed;
+        const FVector Forward = GetActorForwardVector() * Profile.GlideForwardSpeed;
         Velocity.X = Forward.X;
         Velocity.Y = Forward.Y;
     }
@@ -566,10 +584,19 @@ void AFrameworkCharacter::EndGlide()
 
 void AFrameworkCharacter::SetGliding(bool bNewGliding)
 {
-    bWantsGlide = bNewGliding;
-    if (!bNewGliding && bIsGliding)
+    if (bNewGliding && !bJumpInputHeld)
     {
-        EndGlide();
+        JumpHeldStartTime = GetWorld()->GetTimeSeconds();
+    }
+    bJumpInputHeld = bNewGliding;
+
+    if (!bNewGliding)
+    {
+        bWantsGlide = false;
+        if (bIsGliding)
+        {
+            EndGlide();
+        }
     }
 }
 
@@ -693,6 +720,12 @@ void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
 
 void AFrameworkCharacter::EndGrapple()
 {
+    if (GrappleTargetAnchor.IsValid())
+    {
+        const FVector ToAnchor = GrappleTargetAnchor->GetActorLocation() - GetActorLocation();
+        SetActorRotation(FRotator(0.f, ToAnchor.Rotation().Yaw, 0.f));
+    }
+
     GrappleCable->SetVisibility(false);
     GrappleBeamEffect->Deactivate();
     GrappleBeamEffect->SetHiddenInGame(true);
@@ -703,6 +736,64 @@ void AFrameworkCharacter::EndGrapple()
     if (Movement->MovementMode == MOVE_Flying)
     {
         Movement->SetMovementMode(MOVE_Falling);
+    }
+}
+
+void AFrameworkCharacter::UpdateInteractDetection()
+{
+    bCanInteract = false;
+    CurrentInteractable = nullptr;
+
+    UWorld* World = GetWorld();
+    if (!InteractableInterfaceClass || !World)
+    {
+        if (InteractPromptWidget)
+        {
+            InteractPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+        }
+        return;
+    }
+
+    TArray<FOverlapResult> Overlaps;
+    FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(InteractDetection), false, this);
+    World->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, InteractTraceChannel, FCollisionShape::MakeSphere(InteractSphereRadius), QueryParams);
+
+    AActor* BestCandidate = nullptr;
+    float BestDistSq = FLT_MAX;
+
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        AActor* OtherActor = Overlap.GetActor();
+        if (!OtherActor || OtherActor == this || !OtherActor->GetClass()->ImplementsInterface(InteractableInterfaceClass))
+        {
+            continue;
+        }
+
+        const float DistSq = FVector::DistSquared(GetActorLocation(), OtherActor->GetActorLocation());
+        if (DistSq < BestDistSq)
+        {
+            BestDistSq = DistSq;
+            BestCandidate = OtherActor;
+        }
+    }
+
+    if (BestCandidate)
+    {
+        FHitResult Hit;
+        FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(InteractTrace), false, this);
+        const bool bBlocked = World->LineTraceSingleByChannel(Hit, GetActorLocation(), BestCandidate->GetActorLocation(), InteractTraceChannel, TraceParams);
+        const bool bLineOfSight = !bBlocked || Hit.GetActor() == BestCandidate;
+
+        if (bLineOfSight && FMath::Sqrt(BestDistSq) <= MaxInteractDistance)
+        {
+            bCanInteract = true;
+            CurrentInteractable = BestCandidate;
+        }
+    }
+
+    if (InteractPromptWidget)
+    {
+        InteractPromptWidget->SetVisibility(bCanInteract ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
 }
 
@@ -733,6 +824,19 @@ void AFrameworkCharacter::SetMovementProfile(int32 ProfileIndex)
         Movement->RotationRate = FRotator(0.f, Profile.RotationYawRate, 0.f);
         Movement->bOrientRotationToMovement = Profile.bOrientRotationToMovement;
         bUseControllerRotationYaw = Profile.bUseControllerRotationYawSetting;
+    }
+
+    if (USpringArmComponent* SpringArm = FindComponentByClass<USpringArmComponent>())
+    {
+        SpringArm->TargetArmLength = Profile.CameraArmLength;
+        SpringArm->SocketOffset = Profile.CameraSocketOffset;
+        SpringArm->bEnableCameraLag = Profile.bEnableCameraLag;
+        SpringArm->CameraLagSpeed = Profile.CameraLagSpeed;
+    }
+
+    if (UCameraComponent* Camera = FindComponentByClass<UCameraComponent>())
+    {
+        Camera->SetFieldOfView(Profile.CameraFOV);
     }
 
     ApplyWalkSpeed();

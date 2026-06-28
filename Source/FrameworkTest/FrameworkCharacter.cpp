@@ -11,6 +11,7 @@
 #include "Camera/CameraComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/DecalComponent.h"
 
 // Constructor for AFrameworkCharacter class
 // Initializes character with movement profiles and default settings
@@ -104,6 +105,8 @@ void AFrameworkCharacter::BeginPlay()
 void AFrameworkCharacter::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+    UpdateInteractDetection(); // must run before the early-returns below, or the prompt freezes while grappling/ledge-hanging
+    UpdateDropShadowVisibility(); // BP_DropShadow_AC has no grounded check of its own — force-hide its decal while on ground
 
     UCharacterMovementComponent* Movement = GetCharacterMovement();
 
@@ -156,7 +159,6 @@ void AFrameworkCharacter::Tick(float DeltaTime)
     }
 
     UpdateGrappleTargeting();
-    UpdateInteractDetection();
     UpdateMechanicDebugDisplay();
 }
 
@@ -694,6 +696,8 @@ void AFrameworkCharacter::RequestGrapple()
     GrappleCable->SetVisibility(true);
     GrappleBeamEffect->SetHiddenInGame(false);
     GrappleBeamEffect->Activate(true);
+    GrappleBeamEffect->SetVariableVec3(GrappleBeamStartParamName, GetActorLocation());
+    GrappleBeamEffect->SetVariableVec3(GrappleBeamEndParamName, GrappleTargetAnchor->GetActorLocation());
 }
 
 void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
@@ -711,6 +715,8 @@ void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
     SetActorLocation(GetActorLocation() + Direction * GrapplePullSpeed * DeltaTime, true);
 
     GrappleCable->EndLocation = GrappleCable->GetComponentTransform().InverseTransformPosition(AnchorLocation);
+    GrappleBeamEffect->SetVariableVec3(GrappleBeamStartParamName, GetActorLocation());
+    GrappleBeamEffect->SetVariableVec3(GrappleBeamEndParamName, AnchorLocation);
 
     if (ToAnchor.Size() <= GrappleReleaseDistance)
     {
@@ -794,6 +800,22 @@ void AFrameworkCharacter::UpdateInteractDetection()
     if (InteractPromptWidget)
     {
         InteractPromptWidget->SetVisibility(bCanInteract ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    }
+}
+
+void AFrameworkCharacter::UpdateDropShadowVisibility()
+{
+    // BP_DropShadow_AC traces unconditionally every tick and has no grounded check, plus its
+    // trace discards any hit that starts in initial overlap — which is the surface you're
+    // standing on, so it tunnels to whatever's below. Force-hide the decal while grounded instead
+    // of touching that asset's internals.
+    const bool bAirborne = !GetCharacterMovement()->IsMovingOnGround();
+
+    TArray<UDecalComponent*> DropShadowDecals;
+    GetComponents<UDecalComponent>(DropShadowDecals);
+    for (UDecalComponent* Decal : DropShadowDecals)
+    {
+        Decal->SetVisibility(bAirborne);
     }
 }
 

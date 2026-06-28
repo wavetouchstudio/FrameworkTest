@@ -254,6 +254,14 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UNiagaraComponent* GrappleBeamEffect;
 
+    // Niagara vector parameter name for the beam start point (character end)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple")
+    FName GrappleBeamStartParamName = TEXT("BeamStart");
+
+    // Niagara vector parameter name for the beam end point (anchor end)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple")
+    FName GrappleBeamEndParamName = TEXT("BeamEnd");
+
     // Radius around the character within which AGrappleAnchor actors can be targeted
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
     float GrappleTargetingRadius = 2000.f;
@@ -430,4 +438,5 @@ private:
     void EndGrapple();
 
     void UpdateInteractDetection();
+    void UpdateDropShadowVisibility();
 };

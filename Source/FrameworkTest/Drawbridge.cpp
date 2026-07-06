@@ -32,6 +32,7 @@ void ADrawbridge::BeginPlay()
     FRotator StartRot = ClosedRot;
     StartRot.Pitch += CurrentAngle;
     Arm->SetRelativeRotation(StartRot);
+    SetActorTickEnabled(false);
 }
 
 // Called every frame
@@ -44,6 +45,12 @@ void ADrawbridge::Tick(float DeltaTime)
     FRotator NewRot = ClosedRot;
     NewRot.Pitch += CurrentAngle;
     Arm->SetRelativeRotation(NewRot);
+
+    if (FMath::IsNearlyEqual(CurrentAngle, TargetAngle, 0.01f))
+    {
+        CurrentAngle = TargetAngle;
+        SetActorTickEnabled(false);
+    }
 }
 
 // Opens the drawbridge
@@ -52,6 +59,7 @@ void ADrawbridge::Open()
     if (bIsOpen) return;
     bIsOpen = true;
     TargetAngle = OpenAngle;
+    SetActorTickEnabled(true);
     OnOpened();
 }
 
@@ -61,6 +69,7 @@ void ADrawbridge::Close()
     if (!bIsOpen) return;
     bIsOpen = false;
     TargetAngle = 0.f;
+    SetActorTickEnabled(true);
     OnClosed();
 }
 

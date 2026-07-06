@@ -8,10 +8,6 @@ class UStaticMeshComponent;
 class USceneComponent;
 class USphereComponent;
 class APickupObject;
-class ADoorHinged;
-class ADoorSliding;
-class ADoorDestructible;
-class ADrawbridge;
 
 UCLASS(Blueprintable, meta=(PrioritizeCategories="Socket"))
 class FRAMEWORKTEST_API ABlockSocket : public AActor
@@ -70,7 +66,7 @@ private:
     APickupObject* PendingBlock = nullptr;
     bool bSnapping = false;
 
-    void InitiateSnap(APickupObject* Block);
+    bool InitiateSnap(APickupObject* Block);
     void ReleaseBlock();
 
     UFUNCTION()

@@ -32,4 +32,8 @@ public:
 
     UPROPERTY(BlueprintReadOnly, Category = "Save")
     FRotator LastBonfireRotation = FRotator::ZeroRotator;
+
+private:
+    float LastSavedHealth = -1.f; // -1 = no save loaded yet, use character defaults
+    int32 LastSavedProfileIndex = 0;
 };

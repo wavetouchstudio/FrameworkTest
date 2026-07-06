@@ -286,7 +286,10 @@ protected:
     virtual void Tick(float DeltaTime) override;
 
 private:
+    UPROPERTY()
     ACharacter* Carrier = nullptr;
+
+    UPROPERTY()
     USpringArmComponent* CachedSpringArm = nullptr;
     float DefaultArmLength = 0.f;
     FVector DefaultSocketOffset = FVector::ZeroVector;
@@ -321,6 +324,7 @@ private:
 
     void DespawnAndRespawn();
 
+    UPROPERTY()
     APickupObject* PendingStack = nullptr;
     bool bSnappingStack = false;
 

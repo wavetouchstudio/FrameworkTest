@@ -84,9 +84,18 @@ void AFrameworkCharacter::BeginPlay()
     Super::BeginPlay();
 
     CurrentHealth = MaxHealth;
+
+    if (MovementProfiles.Num() == 0)
+    {
+        MovementProfiles.Add(FCharacterMovementProfile()); // ponytail: guarantees index 0 is always valid so every MovementProfiles[CurrentProfileIndex] call site below doesn't need its own guard
+    }
+    CurrentProfileIndex = FMath::Clamp(CurrentProfileIndex, 0, MovementProfiles.Num() - 1);
+
     GlideTimeRemaining = MovementProfiles[CurrentProfileIndex].GlideMaxDuration;
     UpdateHealthDebugDisplay();
     SetMovementProfile(CurrentProfileIndex);
+
+    GetComponents<UDecalComponent>(CachedDropShadowDecals); // cached once — walking every component every tick was wasteful
 
     if (InteractPromptWidgetClass)
     {
@@ -160,7 +169,7 @@ void AFrameworkCharacter::Tick(float DeltaTime)
         GlideTimeRemaining = FMath::Min(Profile.GlideMaxDuration, GlideTimeRemaining + Profile.GlideRechargeRate * DeltaTime);
     }
 
-    UpdateGrappleTargeting();
+    UpdateGrappleTargeting(DeltaTime);
     UpdateMechanicDebugDisplay();
 }
 
@@ -604,8 +613,15 @@ void AFrameworkCharacter::SetGliding(bool bNewGliding)
     }
 }
 
-void AFrameworkCharacter::UpdateGrappleTargeting()
+void AFrameworkCharacter::UpdateGrappleTargeting(float DeltaTime)
 {
+    GrappleScanTimer -= DeltaTime;
+    if (GrappleScanTimer > 0.f)
+    {
+        return; // ponytail: throttle the world actor scan below instead of running it every tick
+    }
+    GrappleScanTimer = GrappleScanInterval;
+
     APlayerController* PC = Cast<APlayerController>(GetController());
     AGrappleAnchor* BestCandidate = nullptr;
 
@@ -813,11 +829,12 @@ void AFrameworkCharacter::UpdateDropShadowVisibility()
     // of touching that asset's internals.
     const bool bAirborne = !GetCharacterMovement()->IsMovingOnGround();
 
-    TArray<UDecalComponent*> DropShadowDecals;
-    GetComponents<UDecalComponent>(DropShadowDecals);
-    for (UDecalComponent* Decal : DropShadowDecals)
+    for (UDecalComponent* Decal : CachedDropShadowDecals)
     {
-        Decal->SetVisibility(bAirborne);
+        if (IsValid(Decal))
+        {
+            Decal->SetVisibility(bAirborne);
+        }
     }
 }
 

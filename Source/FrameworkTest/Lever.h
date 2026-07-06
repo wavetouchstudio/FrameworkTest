@@ -9,8 +9,6 @@ class USceneComponent;
 class UAudioComponent;
 class ALiftManager;
 class APuzzleTrigger;
-class ADoorHinged;
-class ADoorSliding;
 
 UCLASS(meta=(PrioritizeCategories="Lever"))
 class FRAMEWORKTEST_API ALever : public AActor

@@ -52,12 +52,14 @@ void ASplinePlatform::Tick(float DeltaTime)
         {
             if (DistanceAlongSpline >= SplineLen)
             {
-                DistanceAlongSpline = SplineLen;
+                // Reflect the overshoot instead of clamping, so a frame's worth of movement
+                // isn't discarded (clamping caused a visible stutter/pause at each end).
+                DistanceAlongSpline = SplineLen - (DistanceAlongSpline - SplineLen);
                 MovementDir = -1;
             }
             else if (DistanceAlongSpline <= 0.f)
             {
-                DistanceAlongSpline = 0.f;
+                DistanceAlongSpline = -DistanceAlongSpline;
                 MovementDir = 1;
             }
         }

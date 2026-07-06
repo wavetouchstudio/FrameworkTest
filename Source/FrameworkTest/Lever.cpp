@@ -5,9 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "LiftManager.h"
 #include "PuzzleTrigger.h"
-#include "DoorHinged.h"
-#include "DoorSliding.h"
-#include "Drawbridge.h"
+#include "DoorLinkUtils.h"
 
 // Constructor for ALever class
 // Initializes lever with scene components and audio
@@ -60,12 +58,7 @@ void ALever::ActivateLever()
         else LiftManager->CallUp();
     }
 
-    if (IsValid(LinkedDoor))
-    {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->OpenDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->OpenDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Open(); }
-    }
+    OpenLinkedDoor(LinkedDoor);
 
     if (IsValid(LinkedTrigger)) LinkedTrigger->ActivateByLever();
 
@@ -76,12 +69,7 @@ void ALever::ResetLever()
 {
     bHasBeenActivated = false;
 
-    if (IsValid(LinkedDoor))
-    {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->CloseDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->CloseDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Close(); }
-    }
+    CloseLinkedDoor(LinkedDoor);
 
     if (IsValid(LinkedTrigger)) LinkedTrigger->DeactivateByLever();
 

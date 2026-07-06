@@ -106,6 +106,7 @@ bool APickupObject::IsPlayerStandingOnTop(ACharacter* Player) const
 void APickupObject::PickUp(ACharacter* InCarrier)
 {
     Carrier = InCarrier;
+    DefaultJumpMaxCount = Carrier->JumpMaxCount; // ponytail: capture here too, not just in StartPlacement — FinalizeDrop restores from this even if placement was never entered
     bIsCarried = true;
     FloatTime = 0.f;
     LerpAlpha = 0.f;

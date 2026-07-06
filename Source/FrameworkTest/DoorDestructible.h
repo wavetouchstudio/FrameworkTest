@@ -28,7 +28,7 @@ public:
     float MaxHealth = 100.f;
 
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Door|Destructible")
-    float CurrentHealth;
+    float CurrentHealth = 100.f;
 
     // Blueprint actor to spawn as debris — use a cube with Simulate Physics enabled on its root mesh
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Destructible")

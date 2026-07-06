@@ -8,6 +8,7 @@
 class UNiagaraComponent;
 class UCableComponent;
 class AGrappleAnchor;
+class UDecalComponent;
 
 USTRUCT(BlueprintType)
 struct FCharacterMovementProfile
@@ -433,10 +434,13 @@ private:
     bool bIsGrappling = false;
     TWeakObjectPtr<AGrappleAnchor> HighlightedAnchor;
     TWeakObjectPtr<AGrappleAnchor> GrappleTargetAnchor;
-    void UpdateGrappleTargeting();
+    float GrappleScanInterval = 0.1f;
+    float GrappleScanTimer = 0.f;
+    void UpdateGrappleTargeting(float DeltaTime);
     void UpdateGrapple(float DeltaTime);
     void EndGrapple();
 
     void UpdateInteractDetection();
     void UpdateDropShadowVisibility();
+    TArray<UDecalComponent*> CachedDropShadowDecals;
 };

@@ -29,7 +29,15 @@ void APlatformBase::Activate()
 {
     if (PlatformState == EPlatformState::Idle_End) return;
 
-    if (ActivateDelay > 0.f)
+    if (PlatformState == EPlatformState::Moving_ToStart)
+    {
+        // Interrupted mid-transit — mirror elapsed time (not alpha) so the platform reverses
+        // from its current position instead of teleporting to StartLoc. Exact for linear time;
+        // for a MovementCurve this is an approximation since alpha isn't linear in time.
+        TravelElapsed = TravelTime - TravelElapsed;
+        PlatformState = EPlatformState::Moving_ToEnd;
+    }
+    else if (ActivateDelay > 0.f)
     {
         PlatformState = EPlatformState::Delay_ToEnd;
         DelayElapsed = 0.f;
@@ -48,7 +56,13 @@ void APlatformBase::Deactivate()
 {
     if (PlatformState == EPlatformState::Idle_Start) return;
 
-    if (ActivateDelay > 0.f)
+    if (PlatformState == EPlatformState::Moving_ToEnd)
+    {
+        // See Activate() — mirror elapsed time to reverse from the current position, not EndLoc.
+        TravelElapsed = TravelTime - TravelElapsed;
+        PlatformState = EPlatformState::Moving_ToStart;
+    }
+    else if (ActivateDelay > 0.f)
     {
         PlatformState = EPlatformState::Delay_ToStart;
         DelayElapsed = 0.f;

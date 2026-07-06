@@ -7,8 +7,6 @@
 class UBoxComponent;
 class APuzzleManager;
 class APickupObject;
-class ADoorHinged;
-class ADoorSliding;
 
 UCLASS(Blueprintable, meta=(PrioritizeCategories="Trigger"))
 class FRAMEWORKTEST_API APuzzleTrigger : public AActor

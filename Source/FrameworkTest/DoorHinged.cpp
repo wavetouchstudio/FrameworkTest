@@ -46,6 +46,7 @@ void ADoorHinged::BeginPlay()
     CurrentAngle = bStartOpen ? OpenAngle : 0.f;
     TargetAngle = CurrentAngle;
     ApplyMeshRotation();
+    SetActorTickEnabled(false);
 }
 
 // Called every frame
@@ -55,6 +56,13 @@ void ADoorHinged::Tick(float DeltaTime)
     Super::Tick(DeltaTime);
     CurrentAngle = FMath::FInterpTo(CurrentAngle, TargetAngle, DeltaTime, OpenSpeed);
     ApplyMeshRotation();
+
+    if (FMath::IsNearlyEqual(CurrentAngle, TargetAngle, 0.01f))
+    {
+        CurrentAngle = TargetAngle;
+        ApplyMeshRotation();
+        SetActorTickEnabled(false);
+    }
 }
 
 // Applies current rotation to the door mesh
@@ -105,6 +113,7 @@ void ADoorHinged::OpenDoor()
 {
     if (bIsLocked || bIsOpen || bFreeSwing) return;
     bIsOpen = true;
+    SetActorTickEnabled(true);
 
     if (bRotateAwayFromPlayer && HingeAxis == EHingeAxis::Yaw)
     {
@@ -136,6 +145,7 @@ void ADoorHinged::CloseDoor()
     if (!bIsOpen || bFreeSwing) return;
     bIsOpen = false;
     TargetAngle = 0.f;
+    SetActorTickEnabled(true);
     OnClosed();
 }
 

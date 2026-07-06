@@ -1,9 +1,7 @@
 #include "PuzzleTrigger.h"
 #include "PuzzleManager.h"
 #include "PickupObject.h"
-#include "DoorHinged.h"
-#include "DoorSliding.h"
-#include "Drawbridge.h"
+#include "DoorLinkUtils.h"
 
 #include "Components/BoxComponent.h"
 #include "GameFramework/Character.h"
@@ -42,13 +40,7 @@ void APuzzleTrigger::ActivateByLever()
     bIsActive = true;
     PuzzleManager->TriggerActivated(this);
     OnTriggerActivated();
-
-    if (IsValid(LinkedDoor))
-    {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->OpenDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->OpenDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Open(); }
-    }
+    OpenLinkedDoor(LinkedDoor);
 }
 
 // Deactivates the puzzle trigger via lever
@@ -58,13 +50,7 @@ void APuzzleTrigger::DeactivateByLever()
     bIsActive = false;
     PuzzleManager->TriggerDeactivated(this);
     OnTriggerDeactivated();
-
-    if (IsValid(LinkedDoor))
-    {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->CloseDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->CloseDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Close(); }
-    }
+    CloseLinkedDoor(LinkedDoor);
 }
 
 bool APuzzleTrigger::IsAcceptedActor(AActor* Actor) const
@@ -100,13 +86,7 @@ void APuzzleTrigger::NotifyPickupLifted(APickupObject* Pickup)
         bIsActive = false;
         PuzzleManager->TriggerDeactivated(this);
         OnTriggerDeactivated();
-
-        if (IsValid(LinkedDoor))
-        {
-            if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->CloseDoor(); }
-            else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->CloseDoor(); }
-            else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Close(); }
-        }
+        CloseLinkedDoor(LinkedDoor);
     }
 }
 
@@ -133,13 +113,7 @@ void APuzzleTrigger::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComp, AAct
     bIsActive = true;
     PuzzleManager->TriggerActivated(this);
     OnTriggerActivated();
-
-    if (IsValid(LinkedDoor))
-    {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->OpenDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->OpenDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Open(); }
-    }
+    OpenLinkedDoor(LinkedDoor);
 }
 
 void APuzzleTrigger::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -152,11 +126,5 @@ void APuzzleTrigger::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComp, AActor
     bIsActive = false;
     PuzzleManager->TriggerDeactivated(this);
     OnTriggerDeactivated();
-
-    if (IsValid(LinkedDoor))
-    {
-        if (ADoorHinged* DH = Cast<ADoorHinged>(LinkedDoor))          { DH->CloseDoor(); }
-        else if (ADoorSliding* DS = Cast<ADoorSliding>(LinkedDoor))  { DS->CloseDoor(); }
-        else if (ADrawbridge* DB = Cast<ADrawbridge>(LinkedDoor))    { DB->Close(); }
-    }
+    CloseLinkedDoor(LinkedDoor);
 }

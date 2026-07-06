@@ -30,6 +30,7 @@ void ADoorSliding::BeginPlay()
 
     bIsLocked = bStartLocked;
     DoorMeshB->SetVisibility(bDoubleDoor);
+    DoorMeshB->SetCollisionEnabled(bDoubleDoor ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 
     // Snapshot closed positions so slide offsets are relative to wherever the designer placed the meshes
     ClosedPosA = DoorMesh->GetRelativeLocation();
@@ -49,6 +50,8 @@ void ADoorSliding::BeginPlay()
         CurrentPosA = ClosedPosA;
         CurrentPosB = ClosedPosB;
     }
+
+    SetActorTickEnabled(false);
 }
 
 // Called every frame
@@ -63,11 +66,21 @@ void ADoorSliding::Tick(float DeltaTime)
     CurrentPosA = FMath::VInterpTo(CurrentPosA, TargetA, DeltaTime, OpenSpeed);
     DoorMesh->SetRelativeLocation(CurrentPosA);
 
+    bool bSettled = CurrentPosA.Equals(TargetA, 0.01f);
+
     if (bDoubleDoor && DoorMeshB)
     {
         FVector TargetB = bIsOpen ? ClosedPosB - Offset : ClosedPosB;
         CurrentPosB = FMath::VInterpTo(CurrentPosB, TargetB, DeltaTime, OpenSpeed);
         DoorMeshB->SetRelativeLocation(CurrentPosB);
+        bSettled &= CurrentPosB.Equals(TargetB, 0.01f);
+    }
+
+    if (bSettled)
+    {
+        CurrentPosA = TargetA;
+        DoorMesh->SetRelativeLocation(CurrentPosA);
+        SetActorTickEnabled(false);
     }
 }
 
@@ -84,6 +97,7 @@ void ADoorSliding::OpenDoor()
 {
     if (bIsLocked || bIsOpen) return;
     bIsOpen = true;
+    SetActorTickEnabled(true);
     OnOpened();
 }
 
@@ -92,6 +106,7 @@ void ADoorSliding::CloseDoor()
 {
     if (!bIsOpen) return;
     bIsOpen = false;
+    SetActorTickEnabled(true);
     OnClosed();
 }
 

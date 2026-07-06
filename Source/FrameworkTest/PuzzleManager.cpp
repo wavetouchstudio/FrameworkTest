@@ -41,7 +41,7 @@ void APuzzleManager::TriggerDeactivated(APuzzleTrigger* CallingTrigger)
 
     ActiveTriggers.Remove(CallingTrigger);
 
-    if (ActiveTriggers.Num() < RegisteredTriggers.Num())
+    if (bIsSolved && ActiveTriggers.Num() < RegisteredTriggers.Num())
     {
         bIsSolved = false;
         for (APlatformBase* Platform : Platforms)

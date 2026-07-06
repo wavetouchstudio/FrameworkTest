@@ -44,6 +44,7 @@ void ADoorHingedDouble::BeginPlay()
     CurrentAngle = bStartOpen ? OpenAngle : 0.f;
     TargetAngle = CurrentAngle;
     ApplyMeshRotation();
+    SetActorTickEnabled(false);
 }
 
 // Called every frame
@@ -58,6 +59,10 @@ void ADoorHingedDouble::Tick(float DeltaTime)
         const float Sample = OpenCurve ? OpenCurve->GetFloatValue(LerpAlpha) : LerpAlpha;
         CurrentAngle = FMath::Lerp(SourceAngle, TargetAngle, Sample);
         ApplyMeshRotation();
+    }
+    else
+    {
+        SetActorTickEnabled(false);
     }
 }
 
@@ -94,6 +99,7 @@ void ADoorHingedDouble::OpenDoor()
 {
     if (bIsLocked || bIsOpen) return;
     bIsOpen = true;
+    SetActorTickEnabled(true);
 
     if (bRotateAwayFromPlayer && HingeAxis == EHingeAxis::Yaw)
     {
@@ -129,6 +135,7 @@ void ADoorHingedDouble::CloseDoor()
     TargetAngle = 0.f;
     SourceAngle = CurrentAngle;
     LerpAlpha = 0.f;
+    SetActorTickEnabled(true);
     OnClosed();
 }
 

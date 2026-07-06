@@ -38,6 +38,8 @@ bool UFrameworkGameInstance::LoadGame()
 
     LastBonfireLocation = Save->PlayerLocation;
     LastBonfireRotation = Save->PlayerRotation;
+    LastSavedHealth = Save->CurrentHealth;
+    LastSavedProfileIndex = Save->CurrentProfileIndex;
     return true;
 }
 
@@ -50,6 +52,7 @@ void UFrameworkGameInstance::RespawnAtLastBonfire(ACharacter* Player)
 
     if (AFrameworkCharacter* FC = Cast<AFrameworkCharacter>(Player))
     {
-        FC->CurrentHealth = FC->MaxHealth;
+        FC->CurrentHealth = (LastSavedHealth >= 0.f) ? LastSavedHealth : FC->MaxHealth;
+        FC->SetMovementProfile(LastSavedProfileIndex);
     }
 }

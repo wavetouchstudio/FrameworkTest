@@ -7,6 +7,7 @@
 UActionChainComponent::UActionChainComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.bStartWithTickEnabled = false;
 }
 
 void UActionChainComponent::RequestAction()
@@ -30,6 +31,8 @@ void UActionChainComponent::RequestAction()
 
 void UActionChainComponent::StartStage(int32 Index)
 {
+    SetComponentTickEnabled(true);
+
     const int32 Wrapped = Index % ActionChain.Num();
     const FActionStageDef& Stage = ActionChain[Wrapped];
 
@@ -101,5 +104,10 @@ void UActionChainComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
     if (!bStageInProgress && CurrentStageIndex != 0 && Now >= ResetDeadline)
     {
         CurrentStageIndex = 0; // no follow-up came in time — quietly back to stage 0, no penalty
+    }
+
+    if (!bStageInProgress && CurrentStageIndex == 0)
+    {
+        SetComponentTickEnabled(false); // fully idle — stop ticking until the next RequestAction
     }
 }

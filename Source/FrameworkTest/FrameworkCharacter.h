@@ -303,12 +303,20 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Debug")
     bool bIsInPlacementMode = false;
 
+    // When true, double jump ignores its once-per-airtime limit and can be spammed indefinitely
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bDebugInfiniteJump = false;
+
     // --- Test Health Pool ---
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug|Health")
     float MaxHealth = 100.f;
 
     UPROPERTY(BlueprintReadOnly, Category = "Debug|Health")
     float CurrentHealth = 100.f;
+
+    // When true, hitting 0 health just refills to MaxHealth in place with no respawn/teleport. When false, the real death/respawn function fires.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Health")
+    bool bDebugHealOnZeroHealth = false;
 
     // --- Movement Profiles ---
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement Profiles")

@@ -236,7 +236,7 @@ void AFrameworkCharacter::RequestJump()
         bJumpedThisAirtime = true;
         Jump();
     }
-    else if (!bIsWallSliding && MovementProfiles[CurrentProfileIndex].bEnableDoubleJump && !bDoubleJumpUsed && (GetWorld()->GetTimeSeconds() - FirstJumpTime) >= DoubleJumpDelay)
+    else if (!bIsWallSliding && MovementProfiles[CurrentProfileIndex].bEnableDoubleJump && (bDebugInfiniteJump || !bDoubleJumpUsed) && (GetWorld()->GetTimeSeconds() - FirstJumpTime) >= DoubleJumpDelay)
     {
         bDoubleJumpUsed = true;
         LaunchCharacter(FVector(0.f, 0.f, MovementProfiles[CurrentProfileIndex].DoubleJumpZVelocity), false, true);
@@ -944,9 +944,18 @@ void AFrameworkCharacter::ApplyFallDamage_Implementation(float Damage)
 
     if (CurrentHealth <= 0.f)
     {
-        if (UFrameworkGameInstance* GI = Cast<UFrameworkGameInstance>(GetGameInstance()))
-            GI->RespawnAtLastBonfire(this);
-        CurrentHealth = MaxHealth;
+        if (bDebugHealOnZeroHealth)
+        {
+            CurrentHealth = MaxHealth;
+        }
+        else if (UFrameworkGameInstance* GI = Cast<UFrameworkGameInstance>(GetGameInstance()))
+        {
+            GI->RespawnAtLastBonfire(this); // restores saved health/profile, no unconditional stomp after
+        }
+        else
+        {
+            CurrentHealth = MaxHealth; // ponytail: no GameInstance to respawn from, avoid soft-lock at 0 hp
+        }
     }
 
     UpdateHealthDebugDisplay();

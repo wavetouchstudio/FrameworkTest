@@ -1,5 +1,6 @@
 #include "PickupObject.h"
 
+#include "Engine/OverlapResult.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"

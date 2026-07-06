@@ -1,4 +1,5 @@
 #include "FrameworkCharacter.h"
+#include "Engine/OverlapResult.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
@@ -12,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/DecalComponent.h"
+#include "FrameworkGameInstance.h"
 
 // Constructor for AFrameworkCharacter class
 // Initializes character with movement profiles and default settings
@@ -925,6 +927,8 @@ void AFrameworkCharacter::ApplyFallDamage_Implementation(float Damage)
 
     if (CurrentHealth <= 0.f)
     {
+        if (UFrameworkGameInstance* GI = Cast<UFrameworkGameInstance>(GetGameInstance()))
+            GI->RespawnAtLastBonfire(this);
         CurrentHealth = MaxHealth;
     }
 

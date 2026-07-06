@@ -373,10 +373,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact")
     TSubclassOf<UInterface> InteractableInterfaceClass;
 
-    UPROPERTY(BlueprintReadOnly, Category = "Interact")
+    UPROPERTY(BlueprintReadWrite, Category = "Interact")
     bool bCanInteract = false;
 
-    UPROPERTY(BlueprintReadOnly, Category = "Interact")
+    UPROPERTY(BlueprintReadWrite, Category = "Interact")
     AActor* CurrentInteractable = nullptr;
 
 protected:

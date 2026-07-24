@@ -88,3 +88,9 @@ FridayWorkspace/
 AdaptiveCamera.png
 EPMasterMaterials.png
 *.fbx
+.tokensave/branch-meta.json
+.tokensave/config.json
+.tokensave/tokensave.db
+.tokensave/tokensave.db-shm
+.tokensave/tokensave.db-wal
+.stignore

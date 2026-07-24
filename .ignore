@@ -1,10 +1,14 @@
 /.claude
+/.git
+/.serena
 /.stfolder
+/.tokensave
 /.vs
 /.vscode
 /Backup
 /Content
 /DerivedDataCache
 /FridayWorkspace
-/Saved
 /Intermediate
+/Saved
+/SourceFiles

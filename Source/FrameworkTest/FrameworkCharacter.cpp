@@ -13,7 +13,35 @@
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/DecalComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "FrameworkGameInstance.h"
+
+// Closest point on the actor's collision to From, so a wide/multi-mesh actor (e.g. a double
+// door) is reachable from anywhere along its surface instead of only near its root component.
+static FVector GetClosestInteractablePoint(const AActor* Actor, const FVector& From)
+{
+    FVector BestPoint = Actor->GetActorLocation();
+    float BestDistSq = FLT_MAX;
+
+    TArray<UPrimitiveComponent*> Prims;
+    Actor->GetComponents<UPrimitiveComponent>(Prims);
+    for (UPrimitiveComponent* Prim : Prims)
+    {
+        if (!Prim->IsCollisionEnabled())
+        {
+            continue;
+        }
+
+        FVector ClosestPoint;
+        const float DistSq = Prim->GetClosestPointOnCollision(From, ClosestPoint);
+        if (DistSq >= 0.f && DistSq < BestDistSq)
+        {
+            BestDistSq = DistSq;
+            BestPoint = ClosestPoint;
+        }
+    }
+    return BestPoint;
+}
 
 // Constructor for AFrameworkCharacter class
 // Initializes character with movement profiles and default settings
@@ -793,7 +821,8 @@ void AFrameworkCharacter::UpdateInteractDetection()
             continue;
         }
 
-        const float DistSq = FVector::DistSquared(GetActorLocation(), OtherActor->GetActorLocation());
+        const FVector ClosestPoint = GetClosestInteractablePoint(OtherActor, GetActorLocation());
+        const float DistSq = FVector::DistSquared(GetActorLocation(), ClosestPoint);
         if (DistSq < BestDistSq)
         {
             BestDistSq = DistSq;
@@ -803,9 +832,10 @@ void AFrameworkCharacter::UpdateInteractDetection()
 
     if (BestCandidate)
     {
+        const FVector ClosestPoint = GetClosestInteractablePoint(BestCandidate, GetActorLocation());
         FHitResult Hit;
         FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(InteractTrace), false, this);
-        const bool bBlocked = World->LineTraceSingleByChannel(Hit, GetActorLocation(), BestCandidate->GetActorLocation(), InteractTraceChannel, TraceParams);
+        const bool bBlocked = World->LineTraceSingleByChannel(Hit, GetActorLocation(), ClosestPoint, InteractTraceChannel, TraceParams);
         const bool bLineOfSight = !bBlocked || Hit.GetActor() == BestCandidate;
 
         if (bLineOfSight && FMath::Sqrt(BestDistSq) <= MaxInteractDistance)

@@ -264,10 +264,19 @@ void AFrameworkCharacter::RequestJump()
         bJumpedThisAirtime = true;
         Jump();
     }
-    else if (!bIsWallSliding && MovementProfiles[CurrentProfileIndex].bEnableDoubleJump && (bDebugInfiniteJump || !bDoubleJumpUsed) && (GetWorld()->GetTimeSeconds() - FirstJumpTime) >= DoubleJumpDelay)
+    else if (!bIsWallSliding)
     {
-        bDoubleJumpUsed = true;
-        LaunchCharacter(FVector(0.f, 0.f, MovementProfiles[CurrentProfileIndex].DoubleJumpZVelocity), false, true);
+        // Third+ press while airborne (second press for characters without double jump): glide instead of another jump.
+        const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+        if (Profile.bEnableDoubleJump && (bDebugInfiniteJump || !bDoubleJumpUsed) && (GetWorld()->GetTimeSeconds() - FirstJumpTime) >= DoubleJumpDelay)
+        {
+            bDoubleJumpUsed = true;
+            LaunchCharacter(FVector(0.f, 0.f, Profile.DoubleJumpZVelocity), false, true);
+        }
+        else if (!bIsGliding && Profile.bEnableGlide && GlideTimeRemaining > 0.f)
+        {
+            StartGlide();
+        }
     }
 }
 
@@ -562,36 +571,19 @@ void AFrameworkCharacter::ExitLedgeHang()
 
 void AFrameworkCharacter::UpdateGlide(float DeltaTime)
 {
-    UCharacterMovementComponent* Movement = GetCharacterMovement();
-    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
-
-    if (bJumpInputHeld && !bWantsGlide && (GetWorld()->GetTimeSeconds() - JumpHeldStartTime) >= Profile.GlideHoldThreshold)
+    if (!bIsGliding)
     {
-        bWantsGlide = true;
-    }
-
-    if (!bWantsGlide || !Profile.bEnableGlide || GlideTimeRemaining <= 0.f || bIsWallSliding)
-    {
-        if (bIsGliding)
-        {
-            EndGlide();
-        }
         return;
     }
 
-    if (!bIsGliding)
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+    if (!Profile.bEnableGlide || GlideTimeRemaining <= 0.f || bIsWallSliding)
     {
-        bIsGliding = true;
-        GlideTrailEffect->SetHiddenInGame(false);
-        GlideTrailEffect->Activate(true);
-
-        // Wind-catch kick: lift impulse added to current fall velocity, not a downward dive
-        const float LaunchAngleRad = FMath::DegreesToRadians(Profile.GlideLaunchAngle);
-        const FVector Forward = GetActorForwardVector();
-        const FVector LaunchImpulse = Forward * (Profile.GlideLaunchSpeed * FMath::Cos(LaunchAngleRad)) + FVector(0.f, 0.f, Profile.GlideLaunchSpeed * FMath::Sin(LaunchAngleRad));
-        Movement->Velocity += LaunchImpulse;
+        EndGlide();
+        return;
     }
 
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
     GlideTimeRemaining = FMath::Max(0.f, GlideTimeRemaining - DeltaTime);
 
     FVector Velocity = Movement->Velocity;
@@ -613,6 +605,20 @@ void AFrameworkCharacter::UpdateGlide(float DeltaTime)
     }
 }
 
+void AFrameworkCharacter::StartGlide()
+{
+    bIsGliding = true;
+    GlideTrailEffect->SetHiddenInGame(false);
+    GlideTrailEffect->Activate(true);
+
+    // Wind-catch kick: lift impulse added to current fall velocity, not a downward dive
+    const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
+    const float LaunchAngleRad = FMath::DegreesToRadians(Profile.GlideLaunchAngle);
+    const FVector Forward = GetActorForwardVector();
+    const FVector LaunchImpulse = Forward * (Profile.GlideLaunchSpeed * FMath::Cos(LaunchAngleRad)) + FVector(0.f, 0.f, Profile.GlideLaunchSpeed * FMath::Sin(LaunchAngleRad));
+    GetCharacterMovement()->Velocity += LaunchImpulse;
+}
+
 void AFrameworkCharacter::EndGlide()
 {
     if (bIsGliding)
@@ -625,19 +631,11 @@ void AFrameworkCharacter::EndGlide()
 
 void AFrameworkCharacter::SetGliding(bool bNewGliding)
 {
-    if (bNewGliding && !bJumpInputHeld)
+    // Glide now starts via RequestJump (extra press while airborne); this only ends an
+    // active glide early when the jump input is released.
+    if (!bNewGliding && bIsGliding)
     {
-        JumpHeldStartTime = GetWorld()->GetTimeSeconds();
-    }
-    bJumpInputHeld = bNewGliding;
-
-    if (!bNewGliding)
-    {
-        bWantsGlide = false;
-        if (bIsGliding)
-        {
-            EndGlide();
-        }
+        EndGlide();
     }
 }
 
@@ -739,11 +737,14 @@ void AFrameworkCharacter::RequestGrapple()
     Movement->SetMovementMode(MOVE_Flying);
     Movement->StopMovementImmediately();
 
+    GrappleCable->CableLength = FVector::Dist(GetActorLocation(), GrappleTargetAnchor->GetActorLocation());
+    GrappleCable->SetAttachEndTo(GrappleTargetAnchor.Get(), NAME_None, NAME_None);
+    GrappleCable->EndLocation = FVector::ZeroVector;
     GrappleCable->SetVisibility(true);
     GrappleBeamEffect->SetHiddenInGame(false);
     GrappleBeamEffect->Activate(true);
-    GrappleBeamEffect->SetVariableVec3(GrappleBeamStartParamName, GetActorLocation());
-    GrappleBeamEffect->SetVariableVec3(GrappleBeamEndParamName, GrappleTargetAnchor->GetActorLocation());
+    GrappleBeamEffect->SetVariablePosition(GrappleBeamStartParamName, GetActorLocation());
+    GrappleBeamEffect->SetVariablePosition(GrappleBeamEndParamName, GrappleTargetAnchor->GetActorLocation());
 }
 
 void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
@@ -760,9 +761,9 @@ void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
 
     SetActorLocation(GetActorLocation() + Direction * GrapplePullSpeed * DeltaTime, true);
 
-    GrappleCable->EndLocation = GrappleCable->GetComponentTransform().InverseTransformPosition(AnchorLocation);
-    GrappleBeamEffect->SetVariableVec3(GrappleBeamStartParamName, GetActorLocation());
-    GrappleBeamEffect->SetVariableVec3(GrappleBeamEndParamName, AnchorLocation);
+    GrappleCable->CableLength = ToAnchor.Size();
+    GrappleBeamEffect->SetVariablePosition(GrappleBeamStartParamName, GetActorLocation());
+    GrappleBeamEffect->SetVariablePosition(GrappleBeamEndParamName, AnchorLocation);
 
     if (ToAnchor.Size() <= GrappleReleaseDistance)
     {

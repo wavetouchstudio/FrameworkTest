@@ -121,9 +121,6 @@ struct FCharacterMovementProfile
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
     float GlideRechargeRate = 1.f;
 
-    // Seconds the jump input must be held before glide actually engages
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
-    float GlideHoldThreshold = 0.25f;
 
     // One-time impulse magnitude added to velocity the instant glide engages (the "wind catches you" kick)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
@@ -234,8 +231,8 @@ public:
     bool bDebugDrawLedgeTraces = false;
 
     // --- Glide ---
-    // Call from Blueprint's jump input action "Ongoing"/"Triggered" (true) and
-    // "Completed"/"Canceled" (false) events. Glide only engages while falling.
+    // Glide starts via RequestJump (pressing jump again mid-air). Call this with false from
+    // Blueprint's jump input action "Completed"/"Canceled" event to end an active glide early.
     UFUNCTION(BlueprintCallable, Category = "Movement")
     void SetGliding(bool bNewGliding);
 
@@ -431,11 +428,9 @@ private:
     void ExitLedgeHang();
 
     // --- Glide state ---
-    bool bWantsGlide = false;
-    bool bJumpInputHeld = false;
-    float JumpHeldStartTime = -1.f;
     bool bIsGliding = false;
     void UpdateGlide(float DeltaTime);
+    void StartGlide();
     void EndGlide();
 
     // --- Grapple state ---

@@ -9,6 +9,7 @@ class UNiagaraComponent;
 class UCableComponent;
 class AGrappleAnchor;
 class UDecalComponent;
+class UAnimMontage;
 
 USTRUCT(BlueprintType)
 struct FCharacterMovementProfile
@@ -385,6 +386,82 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Interact")
     AActor* CurrentInteractable = nullptr;
 
+    // --- Stamina ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+    float MaxStamina = 100.f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stamina")
+    float CurrentStamina = 100.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina", meta = (ClampMin = "0.0"))
+    float StaminaDrainRate = 20.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina", meta = (ClampMin = "0.1"))
+    float StaminaRechargeRate = 15.f;
+
+    // Sprint drains stamina while held; sprint is not blocked when stamina hits 0 (no design doc yet on lockout behavior)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stamina")
+    bool bEnableSprintDrain = true;
+
+    // Generic drain toggle - call from any Blueprint action that should cost stamina (sprint wires through this automatically)
+    UFUNCTION(BlueprintCallable, Category = "Stamina")
+    void StartCustomAction();
+
+    UFUNCTION(BlueprintCallable, Category = "Stamina")
+    void EndCustomAction();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Stamina")
+    void OnStaminaChanged(float NewValue, float Max);
+
+    // --- Dodge Roll ---
+    // Total distance covered over DodgeRollDuration (units)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Dodge", meta = (ClampMin = "0.0"))
+    float DodgeRollDistance = 500.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Dodge", meta = (ClampMin = "0.05"))
+    float DodgeRollDuration = 0.4f;
+
+    // How long i-frames last from dodge start; independent of DodgeRollDuration (can be shorter)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Dodge", meta = (ClampMin = "0.0"))
+    float DodgeIFrameDuration = 0.35f;
+
+    // Capsule half-height while dodging (shrinks from the profile's normal standing height)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Dodge", meta = (ClampMin = "10.0"))
+    float DodgeCrouchHalfHeight = 44.f;
+
+    // Optional - plays on dodge start if set. Drop a montage built from Content/Dodge_and_Evade_Anims here.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Dodge")
+    UAnimMontage* DodgeMontage = nullptr;
+
+    // Call from Blueprint's IA_Dodge "Started" event, passing the current IA_Move axis values (ForwardAxis/RightAxis).
+    // Direction is camera-relative, captured once at press time. Zero input dodges the character's forward vector.
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    void RequestDodge(float ForwardAxis, float RightAxis);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Movement")
+    void OnDodgeIFrameChanged(bool bActive);
+
+    // True while dodge i-frames are active. Wired into fall damage now.
+    // TODO: no enemy damage/hit-detection system exists in this codebase yet - when one is added, it must check this before applying damage.
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    bool IsDodgeInvincible() const;
+
+    // --- Gear-Based Stats ---
+    UPROPERTY(BlueprintReadWrite, Category = "Stats")
+    TMap<FName, float> StatModifiers;
+
+    UFUNCTION(BlueprintCallable, Category = "Stats")
+    float GetModifierSum(FName StatName) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Stats")
+    void AddStatModifier(FName StatName, float Value);
+
+    UFUNCTION(BlueprintCallable, Category = "Stats")
+    void RemoveStatModifier(FName StatName);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Stats")
+    void OnStatModified(FName StatName, float NewTotalValue);
+
 protected:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
@@ -446,4 +523,17 @@ private:
     void UpdateInteractDetection();
     void UpdateDropShadowVisibility();
     TArray<UDecalComponent*> CachedDropShadowDecals;
+
+    // --- Stamina state ---
+    bool bIsStaminaDraining = false;
+    float LastFiredStamina = -1.f;
+    void UpdateStamina(float DeltaTime);
+
+    // --- Dodge state ---
+    bool bIsDodging = false;
+    float DodgeElapsedTime = 0.f;
+    FVector DodgeDirection = FVector::ZeroVector;
+    float PreDodgeCapsuleHalfHeight = 0.f;
+    void UpdateDodge(float DeltaTime);
+    void EndDodge();
 };

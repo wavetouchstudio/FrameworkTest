@@ -15,6 +15,7 @@
 #include "Components/DecalComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "FrameworkGameInstance.h"
+#include "Animation/AnimMontage.h"
 
 // Closest point on the actor's collision to From, so a wide/multi-mesh actor (e.g. a double
 // door) is reachable from anywhere along its surface instead of only near its root component.
@@ -163,6 +164,13 @@ void AFrameworkCharacter::Tick(float DeltaTime)
         return;
     }
 
+    if (bIsDodging)
+    {
+        UpdateDodge(DeltaTime);
+        UpdateMechanicDebugDisplay();
+        return;
+    }
+
     if (Movement->IsFalling())
     {
         PeakFallSpeed = FMath::Max(PeakFallSpeed, -Movement->Velocity.Z);
@@ -197,6 +205,7 @@ void AFrameworkCharacter::Tick(float DeltaTime)
         GlideTimeRemaining = FMath::Min(Profile.GlideMaxDuration, GlideTimeRemaining + Profile.GlideRechargeRate * DeltaTime);
     }
 
+    UpdateStamina(DeltaTime);
     UpdateGrappleTargeting(DeltaTime);
     UpdateMechanicDebugDisplay();
 }
@@ -888,10 +897,10 @@ void AFrameworkCharacter::SetMovementProfile(int32 ProfileIndex)
 
     if (UCharacterMovementComponent* Movement = GetCharacterMovement())
     {
-        Movement->JumpZVelocity = Profile.JumpZVelocity;
+        Movement->JumpZVelocity = Profile.JumpZVelocity + GetModifierSum("JumpZVelocity");
         Movement->AirControl = Profile.AirControl;
         Movement->GravityScale = Profile.GravityScale;
-        Movement->MaxAcceleration = Profile.MaxAcceleration;
+        Movement->MaxAcceleration = Profile.MaxAcceleration + GetModifierSum("MaxAcceleration");
         Movement->BrakingDecelerationWalking = Profile.BrakingDecelerationWalking;
         Movement->RotationRate = FRotator(0.f, Profile.RotationYawRate, 0.f);
         Movement->bOrientRotationToMovement = Profile.bOrientRotationToMovement;
@@ -929,13 +938,46 @@ void AFrameworkCharacter::ApplyWalkSpeed()
     }
 
     const FCharacterMovementProfile& Profile = MovementProfiles[CurrentProfileIndex];
-    Movement->MaxWalkSpeed = bIsSprinting ? Profile.SprintSpeed : Profile.WalkSpeed;
+    Movement->MaxWalkSpeed = (bIsSprinting ? Profile.SprintSpeed : Profile.WalkSpeed) + GetModifierSum("WalkSpeed");
 }
 
 void AFrameworkCharacter::SetSprinting(bool bNewSprinting)
 {
     bIsSprinting = bNewSprinting;
     ApplyWalkSpeed();
+
+    if (bEnableSprintDrain)
+    {
+        bNewSprinting ? StartCustomAction() : EndCustomAction();
+    }
+}
+
+void AFrameworkCharacter::StartCustomAction()
+{
+    bIsStaminaDraining = true;
+}
+
+void AFrameworkCharacter::EndCustomAction()
+{
+    bIsStaminaDraining = false;
+}
+
+void AFrameworkCharacter::UpdateStamina(float DeltaTime)
+{
+    if (bIsStaminaDraining)
+    {
+        CurrentStamina = FMath::Max(0.f, CurrentStamina - StaminaDrainRate * DeltaTime);
+    }
+    else
+    {
+        CurrentStamina = FMath::Min(MaxStamina, CurrentStamina + StaminaRechargeRate * DeltaTime);
+    }
+
+    if (!FMath::IsNearlyEqual(CurrentStamina, LastFiredStamina))
+    {
+        LastFiredStamina = CurrentStamina;
+        OnStaminaChanged(CurrentStamina, MaxStamina);
+    }
 }
 
 void AFrameworkCharacter::UpdateProfileDebugDisplay() const
@@ -969,8 +1011,119 @@ float AFrameworkCharacter::GetFallDamageMultiplier() const
     return FMath::Max(Multiplier, 0.f);
 }
 
+void AFrameworkCharacter::RequestDodge(float ForwardAxis, float RightAxis)
+{
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (bIsDodging || bIsGrappling || bIsLedgeHanging || (Movement && Movement->IsFalling()))
+    {
+        return;
+    }
+
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    FRotator CamRotation = (PC && PC->PlayerCameraManager) ? PC->PlayerCameraManager->GetCameraRotation() : GetActorRotation();
+    CamRotation.Pitch = 0.f;
+    CamRotation.Roll = 0.f;
+
+    const FVector Forward = FRotationMatrix(CamRotation).GetUnitAxis(EAxis::X);
+    const FVector Right = FRotationMatrix(CamRotation).GetUnitAxis(EAxis::Y);
+
+    FVector Direction = (Forward * ForwardAxis) + (Right * RightAxis);
+    DodgeDirection = Direction.IsNearlyZero() ? GetActorForwardVector() : Direction.GetSafeNormal();
+
+    bIsDodging = true;
+    DodgeElapsedTime = 0.f;
+
+    if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+    {
+        PreDodgeCapsuleHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
+        Capsule->SetCapsuleHalfHeight(DodgeCrouchHalfHeight, true);
+    }
+
+    if (DodgeMontage)
+    {
+        PlayAnimMontage(DodgeMontage);
+    }
+
+    OnDodgeIFrameChanged(true);
+}
+
+void AFrameworkCharacter::UpdateDodge(float DeltaTime)
+{
+    const float PrevElapsed = DodgeElapsedTime;
+    DodgeElapsedTime += DeltaTime;
+
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (Movement)
+    {
+        const float DodgeSpeed = DodgeRollDistance / FMath::Max(DodgeRollDuration, KINDA_SMALL_NUMBER);
+        Movement->Velocity = DodgeDirection * DodgeSpeed;
+    }
+
+    if (PrevElapsed < DodgeIFrameDuration && DodgeElapsedTime >= DodgeIFrameDuration)
+    {
+        OnDodgeIFrameChanged(false);
+    }
+
+    if (DodgeElapsedTime >= DodgeRollDuration)
+    {
+        EndDodge();
+    }
+}
+
+void AFrameworkCharacter::EndDodge()
+{
+    const bool bIFrameStillActive = DodgeElapsedTime < DodgeIFrameDuration;
+
+    bIsDodging = false;
+
+    if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+    {
+        Capsule->SetCapsuleHalfHeight(PreDodgeCapsuleHalfHeight, true);
+    }
+
+    if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+    {
+        Movement->Velocity = FVector::ZeroVector;
+    }
+
+    if (bIFrameStillActive)
+    {
+        OnDodgeIFrameChanged(false); // DodgeRollDuration < DodgeIFrameDuration - roll ended before the edge check in UpdateDodge fired
+    }
+}
+
+bool AFrameworkCharacter::IsDodgeInvincible() const
+{
+    return bIsDodging && DodgeElapsedTime < DodgeIFrameDuration;
+}
+
+float AFrameworkCharacter::GetModifierSum(FName StatName) const
+{
+    const float* Value = StatModifiers.Find(StatName);
+    return Value ? *Value : 0.f;
+}
+
+void AFrameworkCharacter::AddStatModifier(FName StatName, float Value)
+{
+    StatModifiers.Add(StatName, Value);
+    OnStatModified(StatName, GetModifierSum(StatName));
+    SetMovementProfile(CurrentProfileIndex); // reapplies WalkSpeed/JumpZVelocity/MaxAcceleration with the new modifier folded in
+}
+
+void AFrameworkCharacter::RemoveStatModifier(FName StatName)
+{
+    StatModifiers.Remove(StatName);
+    OnStatModified(StatName, 0.f);
+    SetMovementProfile(CurrentProfileIndex);
+}
+
 void AFrameworkCharacter::ApplyFallDamage_Implementation(float Damage)
 {
+    if (IsDodgeInvincible())
+    {
+        return;
+    }
+
     CurrentHealth -= Damage;
 
     if (CurrentHealth <= 0.f)
@@ -1002,7 +1155,12 @@ void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
     FString StateText;
     FColor StateColor = FColor::White;
 
-    if (bIsGrappling)
+    if (bIsDodging)
+    {
+        StateText = FString::Printf(TEXT("Dodging%s"), IsDodgeInvincible() ? TEXT(" (i-frames)") : TEXT(""));
+        StateColor = FColor::Blue;
+    }
+    else if (bIsGrappling)
     {
         StateText = TEXT("Grappling");
         StateColor = FColor::Magenta;
@@ -1049,6 +1207,7 @@ void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
     }
 
     GEngine->AddOnScreenDebugMessage(7723, 0.f, StateColor, FString::Printf(TEXT("Mechanic State: %s"), *StateText));
+    GEngine->AddOnScreenDebugMessage(7727, 0.f, FColor::Green, FString::Printf(TEXT("Stamina: %.0f / %.0f"), CurrentStamina, MaxStamina));
 
     if (!bIsGrappling && HighlightedAnchor.IsValid())
     {

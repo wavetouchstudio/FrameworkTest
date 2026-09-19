@@ -3,11 +3,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Blueprint/UserWidget.h"
+#include "GrappleAnchor.h"
 #include "FrameworkCharacter.generated.h"
 
 class UNiagaraComponent;
 class UCableComponent;
-class AGrappleAnchor;
 class UDecalComponent;
 class UAnimMontage;
 
@@ -273,9 +273,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
     float GrapplePullSpeed = 2000.f;
 
-    // Distance from anchor at which the grapple auto-releases
+    // Distance from anchor at which the grapple auto-releases (Pull anchors only)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
     float GrappleReleaseDistance = 100.f;
+
+    // Velocity multiplier applied when releasing a Swing grapple via jump
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
+    float GrappleSwingReleaseBoost = 1.15f;
+
+    // Extra upward speed (cm/s) added when releasing a Swing grapple via jump
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple", meta = (ClampMin = "0.0"))
+    float GrappleSwingReleaseUpKick = 300.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Tuning|Grapple")
     bool bDebugDrawGrappleTargeting = false;
@@ -315,6 +323,10 @@ public:
     // When true, hitting 0 health just refills to MaxHealth in place with no respawn/teleport. When false, the real death/respawn function fires.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Health")
     bool bDebugHealOnZeroHealth = false;
+
+    // MaxHealth plus any "MaxHealth" gear modifier - use this instead of raw MaxHealth
+    UFUNCTION(BlueprintPure, Category = "Debug|Health")
+    float GetMaxHealth() const { return MaxHealth + GetModifierSum("MaxHealth"); }
 
     // --- Movement Profiles ---
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement Profiles")
@@ -412,6 +424,10 @@ public:
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Stamina")
     void OnStaminaChanged(float NewValue, float Max);
+
+    // MaxStamina plus any "MaxStamina" gear modifier - use this instead of raw MaxStamina
+    UFUNCTION(BlueprintPure, Category = "Stamina")
+    float GetMaxStamina() const { return MaxStamina + GetModifierSum("MaxStamina"); }
 
     // --- Dodge Roll ---
     // Total distance covered over DodgeRollDuration (units)
@@ -512,12 +528,15 @@ private:
 
     // --- Grapple state ---
     bool bIsGrappling = false;
+    EGrappleAnchorType CurrentGrappleType = EGrappleAnchorType::Pull;
     TWeakObjectPtr<AGrappleAnchor> HighlightedAnchor;
     TWeakObjectPtr<AGrappleAnchor> GrappleTargetAnchor;
     float GrappleScanInterval = 0.1f;
     float GrappleScanTimer = 0.f;
+    float GrappleSwingRadius = 0.f;
     void UpdateGrappleTargeting(float DeltaTime);
     void UpdateGrapple(float DeltaTime);
+    void UpdateGrappleSwing(float DeltaTime);
     void EndGrapple();
 
     void UpdateInteractDetection();

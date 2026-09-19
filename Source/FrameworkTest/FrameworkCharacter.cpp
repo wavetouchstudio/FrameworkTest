@@ -112,7 +112,8 @@ void AFrameworkCharacter::BeginPlay()
 {
     Super::BeginPlay();
 
-    CurrentHealth = MaxHealth;
+    CurrentHealth = GetMaxHealth();
+    CurrentStamina = GetMaxStamina();
 
     if (MovementProfiles.Num() == 0)
     {
@@ -152,7 +153,14 @@ void AFrameworkCharacter::Tick(float DeltaTime)
 
     if (bIsGrappling)
     {
-        UpdateGrapple(DeltaTime);
+        if (CurrentGrappleType == EGrappleAnchorType::Swing)
+        {
+            UpdateGrappleSwing(DeltaTime);
+        }
+        else
+        {
+            UpdateGrapple(DeltaTime);
+        }
         UpdateMechanicDebugDisplay();
         return;
     }
@@ -215,6 +223,12 @@ void AFrameworkCharacter::Tick(float DeltaTime)
 void AFrameworkCharacter::RequestJump()
 {
     UCharacterMovementComponent* Movement = GetCharacterMovement();
+
+    if (bIsGrappling && CurrentGrappleType == EGrappleAnchorType::Swing)
+    {
+        EndGrapple(); // release/jump: EndGrapple() applies the boosted swing-release velocity
+        return;
+    }
 
     if (bIsLedgeHanging)
     {
@@ -741,10 +755,20 @@ void AFrameworkCharacter::RequestGrapple()
 
     GrappleTargetAnchor = HighlightedAnchor;
     bIsGrappling = true;
+    CurrentGrappleType = GrappleTargetAnchor->AnchorType;
 
     UCharacterMovementComponent* Movement = GetCharacterMovement();
-    Movement->SetMovementMode(MOVE_Flying);
-    Movement->StopMovementImmediately();
+    if (CurrentGrappleType == EGrappleAnchorType::Swing)
+    {
+        // Keep gravity/velocity so momentum carries into the swing; just stop it counting as a normal fall.
+        Movement->SetMovementMode(MOVE_Falling);
+        GrappleSwingRadius = FVector::Dist(GetActorLocation(), GrappleTargetAnchor->GetActorLocation());
+    }
+    else
+    {
+        Movement->SetMovementMode(MOVE_Flying);
+        Movement->StopMovementImmediately();
+    }
 
     GrappleCable->CableLength = FVector::Dist(GetActorLocation(), GrappleTargetAnchor->GetActorLocation());
     GrappleCable->SetAttachEndTo(GrappleTargetAnchor.Get(), NAME_None, NAME_None);
@@ -780,12 +804,55 @@ void AFrameworkCharacter::UpdateGrapple(float DeltaTime)
     }
 }
 
+void AFrameworkCharacter::UpdateGrappleSwing(float DeltaTime)
+{
+    if (!GrappleTargetAnchor.IsValid())
+    {
+        EndGrapple();
+        return;
+    }
+
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    const FVector AnchorLocation = GrappleTargetAnchor->GetActorLocation();
+
+    // Rope constraint: strip the radial velocity component (toward/away from the anchor) each tick,
+    // leaving only the tangential swing, then snap the position back onto the fixed-radius sphere.
+    FVector ToCharacter = GetActorLocation() - AnchorLocation;
+    const float CurrentDist = ToCharacter.Size();
+    if (CurrentDist > KINDA_SMALL_NUMBER)
+    {
+        const FVector RadialDir = ToCharacter / CurrentDist;
+        const float RadialSpeed = FVector::DotProduct(Movement->Velocity, RadialDir);
+        Movement->Velocity -= RadialDir * RadialSpeed;
+
+        const FVector CorrectedLocation = AnchorLocation + RadialDir * GrappleSwingRadius;
+        SetActorLocation(CorrectedLocation, true);
+        ToCharacter = CorrectedLocation - AnchorLocation;
+    }
+
+    GrappleCable->CableLength = GrappleSwingRadius;
+    GrappleBeamEffect->SetVariablePosition(GrappleBeamStartParamName, GetActorLocation());
+    GrappleBeamEffect->SetVariablePosition(GrappleBeamEndParamName, AnchorLocation);
+}
+
 void AFrameworkCharacter::EndGrapple()
 {
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+
     if (GrappleTargetAnchor.IsValid())
     {
-        const FVector ToAnchor = GrappleTargetAnchor->GetActorLocation() - GetActorLocation();
-        SetActorRotation(FRotator(0.f, ToAnchor.Rotation().Yaw, 0.f));
+        if (CurrentGrappleType == EGrappleAnchorType::Swing)
+        {
+            // Release/jump: boost current swing velocity and kick it upward instead of just dropping.
+            FVector ReleaseVelocity = Movement->Velocity * GrappleSwingReleaseBoost;
+            ReleaseVelocity.Z += GrappleSwingReleaseUpKick;
+            Movement->Velocity = ReleaseVelocity;
+        }
+        else
+        {
+            const FVector ToAnchor = GrappleTargetAnchor->GetActorLocation() - GetActorLocation();
+            SetActorRotation(FRotator(0.f, ToAnchor.Rotation().Yaw, 0.f));
+        }
     }
 
     GrappleCable->SetVisibility(false);
@@ -794,7 +861,6 @@ void AFrameworkCharacter::EndGrapple()
     bIsGrappling = false;
     GrappleTargetAnchor = nullptr;
 
-    UCharacterMovementComponent* Movement = GetCharacterMovement();
     if (Movement->MovementMode == MOVE_Flying)
     {
         Movement->SetMovementMode(MOVE_Falling);
@@ -970,13 +1036,13 @@ void AFrameworkCharacter::UpdateStamina(float DeltaTime)
     }
     else
     {
-        CurrentStamina = FMath::Min(MaxStamina, CurrentStamina + StaminaRechargeRate * DeltaTime);
+        CurrentStamina = FMath::Min(GetMaxStamina(), CurrentStamina + StaminaRechargeRate * DeltaTime);
     }
 
     if (!FMath::IsNearlyEqual(CurrentStamina, LastFiredStamina))
     {
         LastFiredStamina = CurrentStamina;
-        OnStaminaChanged(CurrentStamina, MaxStamina);
+        OnStaminaChanged(CurrentStamina, GetMaxStamina());
     }
 }
 
@@ -1105,14 +1171,38 @@ float AFrameworkCharacter::GetModifierSum(FName StatName) const
 
 void AFrameworkCharacter::AddStatModifier(FName StatName, float Value)
 {
+    const float OldValue = GetModifierSum(StatName);
     StatModifiers.Add(StatName, Value);
+    const float Delta = Value - OldValue;
+
+    // Expanding a pool's max fills the current value by the same amount, so gearing up doesn't leave you sitting at a lower % of the new max
+    if (StatName == FName("MaxHealth"))
+    {
+        CurrentHealth = FMath::Clamp(CurrentHealth + Delta, 0.f, GetMaxHealth());
+    }
+    else if (StatName == FName("MaxStamina"))
+    {
+        CurrentStamina = FMath::Clamp(CurrentStamina + Delta, 0.f, GetMaxStamina());
+    }
+
     OnStatModified(StatName, GetModifierSum(StatName));
     SetMovementProfile(CurrentProfileIndex); // reapplies WalkSpeed/JumpZVelocity/MaxAcceleration with the new modifier folded in
 }
 
 void AFrameworkCharacter::RemoveStatModifier(FName StatName)
 {
+    const float OldValue = GetModifierSum(StatName);
     StatModifiers.Remove(StatName);
+
+    if (StatName == FName("MaxHealth"))
+    {
+        CurrentHealth = FMath::Clamp(CurrentHealth - OldValue, 0.f, GetMaxHealth());
+    }
+    else if (StatName == FName("MaxStamina"))
+    {
+        CurrentStamina = FMath::Clamp(CurrentStamina - OldValue, 0.f, GetMaxStamina());
+    }
+
     OnStatModified(StatName, 0.f);
     SetMovementProfile(CurrentProfileIndex);
 }
@@ -1130,7 +1220,7 @@ void AFrameworkCharacter::ApplyFallDamage_Implementation(float Damage)
     {
         if (bDebugHealOnZeroHealth)
         {
-            CurrentHealth = MaxHealth;
+            CurrentHealth = GetMaxHealth();
         }
         else if (UFrameworkGameInstance* GI = Cast<UFrameworkGameInstance>(GetGameInstance()))
         {
@@ -1138,7 +1228,7 @@ void AFrameworkCharacter::ApplyFallDamage_Implementation(float Damage)
         }
         else
         {
-            CurrentHealth = MaxHealth; // ponytail: no GameInstance to respawn from, avoid soft-lock at 0 hp
+            CurrentHealth = GetMaxHealth(); // ponytail: no GameInstance to respawn from, avoid soft-lock at 0 hp
         }
     }
 
@@ -1207,7 +1297,7 @@ void AFrameworkCharacter::UpdateMechanicDebugDisplay() const
     }
 
     GEngine->AddOnScreenDebugMessage(7723, 0.f, StateColor, FString::Printf(TEXT("Mechanic State: %s"), *StateText));
-    GEngine->AddOnScreenDebugMessage(7727, 0.f, FColor::Green, FString::Printf(TEXT("Stamina: %.0f / %.0f"), CurrentStamina, MaxStamina));
+    GEngine->AddOnScreenDebugMessage(7727, 0.f, FColor::Green, FString::Printf(TEXT("Stamina: %.0f / %.0f"), CurrentStamina, GetMaxStamina()));
 
     if (!bIsGrappling && HighlightedAnchor.IsValid())
     {
@@ -1227,5 +1317,5 @@ void AFrameworkCharacter::UpdateHealthDebugDisplay() const
         return;
     }
 
-    GEngine->AddOnScreenDebugMessage(7724, 5.f, FColor::Red, FString::Printf(TEXT("Health: %.0f / %.0f"), CurrentHealth, MaxHealth));
+    GEngine->AddOnScreenDebugMessage(7724, 5.f, FColor::Red, FString::Printf(TEXT("Health: %.0f / %.0f"), CurrentHealth, GetMaxHealth()));
 }

@@ -1,8 +1,6 @@
 #include "DoorHingedDouble.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
-#include "GameFramework/PlayerController.h"
-#include "GameFramework/Pawn.h"
 #include "Curves/CurveFloat.h"
 
 // Constructor for ADoorHingedDouble class
@@ -36,7 +34,6 @@ void ADoorHingedDouble::BeginPlay()
 {
     Super::BeginPlay();
 
-    bIsLocked = bStartLocked;
     ClosedRotA = HingePivotA->GetRelativeRotation();
     ClosedRotB = HingePivotB->GetRelativeRotation();
 
@@ -87,68 +84,20 @@ void ADoorHingedDouble::ApplyMeshRotation()
     HingePivotB->SetRelativeRotation(NewRotB);
 }
 
-// Toggles door between open and closed states
-void ADoorHingedDouble::ToggleDoor()
+// Starts the open animation, picking a swing direction away from the player if enabled
+void ADoorHingedDouble::StartOpenAnimation()
 {
-    if (bIsLocked) return;
-    bIsOpen ? CloseDoor() : OpenDoor();
-}
-
-// Opens the door with animation
-void ADoorHingedDouble::OpenDoor()
-{
-    if (bIsLocked || bIsOpen) return;
-    bIsOpen = true;
     SetActorTickEnabled(true);
-
-    if (bRotateAwayFromPlayer && HingeAxis == EHingeAxis::Yaw)
-    {
-        float Angle = FMath::Abs(OpenAngle);
-        APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
-        APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-        if (Pawn)
-        {
-            FVector ToPawn = Pawn->GetActorLocation() - HingePivotA->GetComponentLocation();
-            float Dot = FVector::DotProduct(ToPawn, HingePivotA->GetRightVector());
-            TargetAngle = (Dot >= 0.f) ? -Angle : Angle;
-        }
-        else
-        {
-            TargetAngle = OpenAngle;
-        }
-    }
-    else
-    {
-        TargetAngle = OpenAngle;
-    }
-
+    TargetAngle = ComputeOpenAngle(HingePivotA->GetComponentLocation(), HingePivotA->GetRightVector());
     SourceAngle = CurrentAngle;
     LerpAlpha = 0.f;
-    OnOpened();
 }
 
-// Closes the door with animation
-void ADoorHingedDouble::CloseDoor()
+// Starts the close animation
+void ADoorHingedDouble::StartCloseAnimation()
 {
-    if (!bIsOpen) return;
-    bIsOpen = false;
     TargetAngle = 0.f;
     SourceAngle = CurrentAngle;
     LerpAlpha = 0.f;
     SetActorTickEnabled(true);
-    OnClosed();
-}
-
-// Locks the door to prevent opening
-void ADoorHingedDouble::LockDoor()
-{
-    bIsLocked = true;
-    OnLocked();
-}
-
-// Unlocks the door to allow opening
-void ADoorHingedDouble::UnlockDoor()
-{
-    bIsLocked = false;
-    OnUnlocked();
 }

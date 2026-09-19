@@ -2,8 +2,6 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "PhysicsEngine/PhysicsConstraintComponent.h"
-#include "GameFramework/PlayerController.h"
-#include "GameFramework/Pawn.h"
 
 // Constructor for ADoorHinged class
 // Initializes hinged door with pivot, frame, arm, mesh, and constraint components
@@ -33,7 +31,6 @@ void ADoorHinged::BeginPlay()
 {
     Super::BeginPlay();
 
-    bIsLocked = bStartLocked;
     ClosedRot = HingeArm->GetRelativeRotation();
 
     if (bFreeSwing)
@@ -101,64 +98,16 @@ void ADoorHinged::SetupFreeSwing()
     HingeConstraint->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
 }
 
-// Toggles door between open and closed states
-void ADoorHinged::ToggleDoor()
+// Starts the open-swing animation, picking a swing direction away from the player if enabled
+void ADoorHinged::StartOpenAnimation()
 {
-    if (bIsLocked || bFreeSwing) return;
-    bIsOpen ? CloseDoor() : OpenDoor();
-}
-
-// Opens the door with animation
-void ADoorHinged::OpenDoor()
-{
-    if (bIsLocked || bIsOpen || bFreeSwing) return;
-    bIsOpen = true;
     SetActorTickEnabled(true);
-
-    if (bRotateAwayFromPlayer && HingeAxis == EHingeAxis::Yaw)
-    {
-        float Angle = FMath::Abs(OpenAngle);
-        APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
-        APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-        if (Pawn)
-        {
-            FVector ToPawn = Pawn->GetActorLocation() - HingePivot->GetComponentLocation();
-            float Dot = FVector::DotProduct(ToPawn, HingePivot->GetRightVector());
-            TargetAngle = (Dot >= 0.f) ? -Angle : Angle;
-        }
-        else
-        {
-            TargetAngle = OpenAngle;
-        }
-    }
-    else
-    {
-        TargetAngle = OpenAngle;
-    }
-
-    OnOpened();
+    TargetAngle = ComputeOpenAngle(HingePivot->GetComponentLocation(), HingePivot->GetRightVector());
 }
 
-// Closes the door with animation
-void ADoorHinged::CloseDoor()
+// Starts the close-swing animation
+void ADoorHinged::StartCloseAnimation()
 {
-    if (!bIsOpen || bFreeSwing) return;
-    bIsOpen = false;
     TargetAngle = 0.f;
     SetActorTickEnabled(true);
-    OnClosed();
-}
-
-// Locks the door to prevent opening
-void ADoorHinged::LockDoor()
-{
-    bIsLocked = true;
-    OnLocked();
-}
-
-// Unlocks the door to allow opening
-void ADoorHinged::UnlockDoor()
-{
-    bIsLocked = false;
-    OnUnlocked();
 }
